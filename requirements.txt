@@ -1,0 +1,9 @@
+fastapi==0.128.0
+uvicorn[standard]==0.29.0
+pydantic==2.12.5
+python-multipart==0.0.6
+qiskit==2.3.0
+qiskit-aer==0.17.2
+qiskit-optimization==0.7.0
+numpy==2.4.1
+scipy==1.17.0
