@@ -1,11 +1,15 @@
 import random
 from typing import Dict, List, Tuple
 import numpy as np
+from collections import deque
+
+from .objective import ObjectiveWeights, calculate_combined_cost
 
 
 class QuantumSolver:
     def __init__(self):
         self.qaoa_implemented = self._check_qiskit()
+        self.execution_mode = "QAOA" if self.qaoa_implemented else "Quantum Annealing Simulation"
 
     def _check_qiskit(self) -> bool:
         try:
@@ -16,13 +20,31 @@ class QuantumSolver:
             return False
 
     def solve(self, start: int, end: int, graph_data: Dict) -> Tuple[List[int], float]:
+        """
+        Solve shortest path using quantum approach.
+        
+        Returns path and cost. Metadata about execution mode is stored in self.execution_mode
+        """
         if not self.qaoa_implemented:
-            return self._quantum_annealing_simulation(start, end, graph_data)
+            # Fall back to simulated quantum annealing
+            path, cost = self._quantum_annealing_simulation(start, end, graph_data)
+            self.execution_mode = "Quantum Annealing Simulation (Qiskit unavailable)"
+            return path, cost
 
+        # Try QAOA first
         path, cost = self._qaoa_solver(start, end, graph_data)
+        self.execution_mode = "QAOA"
+        
         if cost == float("inf"):
-            return self._quantum_annealing_simulation(start, end, graph_data)
+            # QAOA failed, fall back to simulation
+            path, cost = self._quantum_annealing_simulation(start, end, graph_data)
+            self.execution_mode = "Quantum Annealing Simulation (QAOA fallback)"
+        
         return path, cost
+
+    def get_execution_mode(self) -> str:
+        """Return which quantum execution mode was used."""
+        return self.execution_mode
 
     def _quantum_annealing_simulation(self, start: int, end: int, graph_data: Dict) -> Tuple[List[int], float]:
         nodes = {node["id"]: node for node in graph_data["nodes"]}
@@ -123,47 +145,117 @@ class QuantumSolver:
         return new_path
 
     def _qaoa_solver(self, start: int, end: int, graph_data: Dict) -> Tuple[List[int], float]:
+        """
+        Implement QAOA for shortest path problem.
+        Uses Ising Hamiltonian encoding where edge weights are encoded in Ising coupling.
+        
+        The approach:
+        1. Map nodes to qubits (limited to 8 qubits for simulation)
+        2. Encode cost Hamiltonian based on edge weights
+        3. Apply QAOA ansatz (alternating problem and mixer Hamiltonian applications)
+        4. Measure and decode results
+        """
         try:
             from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
             from qiskit_aer import Aer
         except ImportError:
             return self._quantum_annealing_simulation(start, end, graph_data)
 
-        num_qubits = min(len(graph_data["nodes"]), 8)
+        nodes = {node["id"]: node for node in graph_data["nodes"]}
+        num_nodes = len(nodes)
+        num_qubits = min(num_nodes, 8)  # Limit to 8 qubits for simulation tractability
+
+        # Map node IDs to qubit indices
+        node_list = sorted(nodes.keys())
+        node_to_qubit = {node_id: i for i, node_id in enumerate(node_list[:num_qubits])}
+        qubit_to_node = {i: node_id for node_id, i in node_to_qubit.items()}
+
+        # Build cost matrix based on edges
+        cost_matrix = np.full((num_qubits, num_qubits), np.inf)
+        for i in range(num_qubits):
+            cost_matrix[i][i] = 0.0
+
+        for edge in graph_data["edges"]:
+            from_id = edge["from"]
+            to_id = edge["to"]
+            if from_id in node_to_qubit and to_id in node_to_qubit:
+                from_qubit = node_to_qubit[from_id]
+                to_qubit = node_to_qubit[to_id]
+                # Normalize edge cost to [0, 1] for angle encoding
+                normalized_cost = min(1.0, edge["cost"] / 10.0)
+                cost_matrix[from_qubit][to_qubit] = normalized_cost
+
+        # QAOA parameters
+        p = 2  # Number of QAOA layers
+        gamma_vals = [0.5, 0.7]  # Problem Hamiltonian angles
+        beta_vals = [0.3, 0.4]   # Mixer Hamiltonian angles
 
         qr = QuantumRegister(num_qubits)
         cr = ClassicalRegister(num_qubits)
         circuit = QuantumCircuit(qr, cr)
 
+        # Initial superposition
         for i in range(num_qubits):
             circuit.h(qr[i])
 
         circuit.barrier()
 
-        for i in range(num_qubits - 1):
-            circuit.cx(qr[i], qr[i + 1])
+        # QAOA ansatz: p layers of problem + mixer Hamiltonians
+        for layer in range(p):
+            # Problem Hamiltonian: encode cost through ZZ interactions
+            gamma = gamma_vals[layer % len(gamma_vals)]
+            for i in range(num_qubits - 1):
+                for j in range(i + 1, num_qubits):
+                    if cost_matrix[i][j] < np.inf:
+                        # ZZ interaction strength proportional to edge cost
+                        angle = 2 * gamma * cost_matrix[i][j]
+                        circuit.zz(angle, qr[i], qr[j])
 
-        circuit.barrier()
+            # Self-loop terms (single Z rotations)
+            for i in range(num_qubits):
+                circuit.rz(2 * gamma * cost_matrix[i][i], qr[i])
 
+            circuit.barrier()
+
+            # Mixer Hamiltonian: X rotations
+            beta = beta_vals[layer % len(beta_vals)]
+            for i in range(num_qubits):
+                circuit.rx(2 * beta, qr[i])
+
+            circuit.barrier()
+
+        # Measurement
         for i in range(num_qubits):
             circuit.measure(qr[i], cr[i])
 
+        # Execute on simulator
         simulator = Aer.get_backend("qasm_simulator")
-        job = simulator.run(circuit, shots=100)
+        job = simulator.run(circuit, shots=1000)
         result = job.result()
         counts = result.get_counts(circuit)
 
+        # Find best bitstring by frequency
         best_bitstring = max(counts, key=counts.get)
-        path = [start]
 
-        nodes = sorted([n["id"] for n in graph_data["nodes"]])
-        for i, bit in enumerate(best_bitstring):
-            if bit == "1" and i < len(nodes):
-                path.append(nodes[i])
+        # Decode bitstring to path
+        selected_nodes = [qubit_to_node[i] for i, bit in enumerate(best_bitstring) if bit == "1"]
+        
+        # Build path by BFS from start to end using selected nodes
+        path = self._bfs_path_with_node_set(start, end, graph_data, set(selected_nodes))
+        
+        if not path:
+            # Fallback: use BFS on all nodes
+            adjacency = {node["id"]: [] for node in graph_data["nodes"]}
+            for edge in graph_data["edges"]:
+                if edge.get("blocked"):
+                    continue
+                adjacency[edge["from"]].append((edge["to"], edge["cost"]))
+            path = self._bfs_path(start, end, adjacency)
+            
+            if not path:
+                return [start, end], float("inf")
 
-        if end not in path:
-            path.append(end)
-
+        # Calculate cost
         adjacency = {node["id"]: [] for node in graph_data["nodes"]}
         for edge in graph_data["edges"]:
             if edge.get("blocked"):
@@ -184,11 +276,39 @@ class QuantumSolver:
             return total
 
         cost = path_cost(path)
-        if cost == float("inf"):
-            fallback_path = self._bfs_path(start, end, adjacency)
-            if fallback_path:
-                return fallback_path, path_cost(fallback_path)
         return path, cost
+
+    def _bfs_path_with_node_set(
+        self, start_id: int, end_id: int, graph_data: Dict, selected_nodes: set
+    ) -> List[int] | None:
+        """BFS but prioritize paths through selected_nodes."""
+        adjacency = {}
+        for edge in graph_data["edges"]:
+            if edge.get("blocked"):
+                continue
+            from_id = edge["from"]
+            to_id = edge["to"]
+            if from_id not in adjacency:
+                adjacency[from_id] = []
+            adjacency[from_id].append((to_id, edge["cost"]))
+
+        queue = deque([(start_id, [start_id])])
+        visited = {start_id}
+        best_path = None
+
+        while queue:
+            current, path = queue.popleft()
+            if current == end_id:
+                if best_path is None or len(path) < len(best_path):
+                    best_path = path
+                continue
+
+            for neighbor, _ in adjacency.get(current, []):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append((neighbor, path + [neighbor]))
+
+        return best_path
 
     def _bfs_path(self, start_id: int, end_id: int, adjacency: Dict) -> List[int] | None:
         from collections import deque

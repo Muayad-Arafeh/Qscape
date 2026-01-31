@@ -10,7 +10,6 @@ from graph import get_graph
 from algorithms import (
     QuantumSolver,
     GeneticAlgorithmSolver,
-    PathCache,
     dijkstra,
     dynamic_programming,
     astar,
@@ -38,7 +37,6 @@ app.add_middleware(
 graph_data = get_graph()
 quantum_solver = QuantumSolver()
 genetic_solver = GeneticAlgorithmSolver(population_size=15, generations=8)
-path_cache = PathCache()
 
 
 @app.get("/graph", response_model=GraphModel)
@@ -62,7 +60,6 @@ def update_graph(payload: GraphUpdate):
     if payload.end is not None:
         graph_data["end"] = payload.end
 
-    rebuild_path_cache()
     return graph_data
 
 
@@ -111,33 +108,31 @@ def solve_routing(request: RoutingRequest):
     cost = None
     execution_time = 0.0
     is_optimal = False
+    quantum_mode = None
     
     start_time = time.time()
     
-    if algorithm == "cache":
-        result = path_cache.get(request.start, request.end)
-        if result[2]:
-            path, cost = result[0], result[1]
-            is_optimal = True
-        else:
-            path, cost = dijkstra(
-                request.start,
-                request.end,
-                graph_data,
-                request.avoid_hazards,
-                request.risk_weight,
-                request.hazard_weight,
-            )
-            is_optimal = True
-    
+    if algorithm == "cache" or algorithm == "dijkstra":
+        # Cache is no longer available, use dijkstra instead
+        path, cost = dijkstra(
+            request.start,
+            request.end,
+            graph_data,
+            request.avoid_hazards,
+            request.risk_weight,
+            request.hazard_weight,
+        )
+        is_optimal = True
+
     elif algorithm == "quantum":
         path, cost = quantum_solver.solve(request.start, request.end, graph_data)
-        is_optimal = True
-    
+        quantum_mode = quantum_solver.get_execution_mode()
+        is_optimal = False  # QAOA is heuristic, not guaranteed optimal
+
     elif algorithm == "genetic":
         path, cost = genetic_solver.solve(request.start, request.end, graph_data)
         is_optimal = False
-    
+
     else:
         path, cost = dijkstra(
             request.start,
@@ -148,18 +143,18 @@ def solve_routing(request: RoutingRequest):
             request.hazard_weight,
         )
         is_optimal = True
-    
+
     execution_time = (time.time() - start_time) * 1000
-    
+
     if cost == float('inf'):
         raise HTTPException(status_code=400, detail="No path exists between nodes")
-    
+
     path_nodes = [node for node in graph_data["nodes"] if node["id"] in path]
     path_edges = [
         edge for edge in graph_data["edges"]
         if (edge["from"], edge["to"]) in [(path[i], path[i+1]) for i in range(len(path)-1)]
     ]
-    
+
     return {
         "path": path,
         "cost": cost,
@@ -167,17 +162,14 @@ def solve_routing(request: RoutingRequest):
         "edges": path_edges,
         "algorithm": algorithm,
         "execution_time_ms": round(execution_time, 2),
-        "is_optimal": is_optimal
+        "is_optimal": is_optimal,
+        "quantum_mode": quantum_mode,
     }
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-
-
-class ComparisonResponse(BaseModel):
-    algorithms: Dict[str, Dict]
 
 
 @app.post("/solve/compare")
@@ -267,6 +259,7 @@ def compare_algorithms(request: RoutingRequest):
             "cost": cost,
             "execution_time_ms": round(execution_time, 2),
             "is_optimal": False,
+            "mode": quantum_solver.get_execution_mode(),
         }
     except Exception as e:
         results["quantum"] = {"error": str(e)}

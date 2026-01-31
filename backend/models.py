@@ -52,6 +52,7 @@ class PathResponse(BaseModel):
     algorithm: str
     execution_time_ms: float
     is_optimal: bool
+    quantum_mode: Optional[str] = None  # "QAOA", "Quantum Annealing Simulation", etc.
 
 
 class GraphUpdate(BaseModel):
