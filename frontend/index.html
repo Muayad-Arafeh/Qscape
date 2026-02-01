@@ -4,71 +4,153 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qscape - Quantum Routing</title>
-    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Qscape</h1>
-            <p>Quantum-Optimized Evacuation Routing</p>
+<body class="bg-gradient-to-br from-purple-600 to-purple-900 min-h-screen p-6">
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-8">
+            <h1 class="text-4xl font-bold mb-2">Qscape</h1>
+            <p class="text-lg opacity-90">Quantum-Optimized Evacuation Routing</p>
         </header>
 
-        <div class="main">
-            <div class="canvas-container">
-                <canvas id="graphCanvas"></canvas>
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-8">
+            <!-- Graph Visualization -->
+            <div class="lg:col-span-2">
+                <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-4 h-96 lg:h-full min-h-96 flex items-center justify-center">
+                    <canvas id="graphCanvas" class="rounded-lg w-full h-full cursor-crosshair"></canvas>
+                </div>
             </div>
 
-            <div class="controls">
-                <h2>Routing Control</h2>
-                <div class="control-group">
-                    <label>Start Node:</label>
-                    <input type="number" id="startNode" min="0" max="23" value="0">
+            <!-- Controls Sidebar -->
+            <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-6 space-y-6 h-fit sticky top-8">
+                <h2 class="text-2xl font-bold text-gray-800">Routing Control</h2>
+
+                <!-- Route Selection -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block font-semibold text-gray-700 mb-2">Start Node:</label>
+                        <input type="number" id="startNode" min="0" max="23" value="0" class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-700 mb-2">End Node:</label>
+                        <input type="number" id="endNode" min="0" max="23" value="23" class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                    </div>
                 </div>
-                <div class="control-group">
-                    <label>End Node:</label>
-                    <input type="number" id="endNode" min="0" max="23" value="23">
-                </div>
-                <div class="control-group">
-                    <label>Algorithm:</label>
-                    <select id="algorithmSelect">
+
+                <!-- Algorithm Selection -->
+                <div>
+                    <label class="block font-semibold text-gray-700 mb-2">Algorithm:</label>
+                    <select id="algorithmSelect" class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none bg-white">
                         <option value="dijkstra">Dijkstra (Classical)</option>
+                        <option value="dynamic_programming">Dynamic Programming</option>
+                        <option value="astar">A* Heuristic</option>
                         <option value="quantum">Quantum QAOA</option>
                         <option value="genetic">Genetic Algorithm</option>
-                        <option value="cache">Database Cache</option>
                     </select>
                 </div>
-                <button id="solveBtn">Find Path</button>
-                <button id="resetBtn">Reset</button>
-            </div>
-        </div>
 
-        <div class="results" id="results" style="display:none;">
-            <h3>Solution</h3>
-            <div class="result-row">
-                <div class="result-item">
-                    <strong>Algorithm:</strong> <span id="algoDisplay"></span>
-                </div>
-                <div class="result-item">
-                    <strong>Execution Time:</strong> <span id="timeDisplay"></span> ms
-                </div>
-            </div>
-            <div class="result-row">
-                <div class="result-item">
-                    <strong>Path:</strong> <span id="pathDisplay"></span>
-                </div>
-                <div class="result-item">
-                    <strong>Total Cost:</strong> <span id="costDisplay"></span>
-                </div>
-            </div>
-            <div class="result-row">
-                <div class="result-item">
-                    <strong>Optimality:</strong> <span id="optimalDisplay"></span>
+                <!-- Buttons -->
+                <div class="space-y-2 pt-4">
+                    <button id="solveBtn" class="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 active:scale-100">
+                        Find Path
+                    </button>
+                    <button id="compareBtn" class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 active:scale-100">
+                        Compare All
+                    </button>
+                    <button id="resetBtn" class="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-4 rounded-lg transition">
+                        Reset
+                    </button>
                 </div>
             </div>
         </div>
 
-        <footer>
-            <p>Click on nodes to select start/end, or use input fields • Compare algorithm performance</p>
+        <!-- Hazard & Constraint Controls -->
+        <div class="border-t-2 border-gray-200 p-8 bg-gray-50">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Hazard & Constraint Management</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Quick Hazard Toggle -->
+                <div>
+                    <label class="block font-semibold text-gray-700 mb-3">Set Hazards on Zones:</label>
+                    <div class="space-y-2">
+                        <button id="hazardZoneB" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition">
+                            Toggle Zone B as Hazard
+                        </button>
+                        <small class="block text-gray-600">Zone B (nodes 6-13) is high-risk</small>
+                    </div>
+                </div>
+
+                <!-- Risk Weighting -->
+                <div>
+                    <label class="block font-semibold text-gray-700 mb-3">Objective Weights:</label>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-sm text-gray-600">Time Weight: <span id="timeWeightValue" class="font-bold">1.0</span></label>
+                            <input type="range" id="timeWeight" min="0" max="2" step="0.1" value="1.0" class="w-full h-2 bg-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-600">Risk Weight: <span id="riskWeightValue" class="font-bold">0.5</span></label>
+                            <input type="range" id="riskWeight" min="0" max="2" step="0.1" value="0.5" class="w-full h-2 bg-gray-300 rounded-lg">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Solution Results -->
+        <div id="results" style="display:none;" class="border-t-2 border-gray-200 p-8 bg-blue-50">
+            <h3 class="text-xl font-bold text-blue-900 mb-4">Solution</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="bg-white rounded-lg border-l-4 border-purple-500 p-4">
+                    <strong class="text-gray-700">Algorithm:</strong>
+                    <span id="algoDisplay" class="block text-purple-600 font-bold mt-2"></span>
+                </div>
+                <div class="bg-white rounded-lg border-l-4 border-blue-500 p-4">
+                    <strong class="text-gray-700">Execution Time:</strong>
+                    <span id="timeDisplay" class="block text-blue-600 font-bold mt-2"></span> ms
+                </div>
+                <div class="bg-white rounded-lg border-l-4 border-green-500 p-4">
+                    <strong class="text-gray-700">Total Cost:</strong>
+                    <span id="costDisplay" class="block text-green-600 font-bold mt-2"></span>
+                </div>
+                <div class="bg-white rounded-lg border-l-4 border-orange-500 p-4">
+                    <strong class="text-gray-700">Optimality:</strong>
+                    <span id="optimalDisplay" class="block text-orange-600 font-bold mt-2"></span>
+                </div>
+                <div class="bg-white rounded-lg border-l-4 border-indigo-500 p-4">
+                    <strong class="text-gray-700">Quantum Mode:</strong>
+                    <span id="quantumModeDisplay" class="block text-indigo-600 font-bold text-sm mt-2"></span>
+                </div>
+            </div>
+            <div class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
+                <strong class="text-gray-700">Path:</strong>
+                <span id="pathDisplay" class="block text-gray-600 mt-2 font-mono text-sm"></span>
+            </div>
+        </div>
+
+        <!-- Comparison Results -->
+        <div id="comparison" style="display:none;" class="border-t-2 border-gray-200 p-8 bg-green-50">
+            <h3 class="text-xl font-bold text-green-900 mb-4">Algorithm Comparison</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-green-100 border-b-2 border-green-300">
+                            <th class="border border-green-300 p-3 text-left font-bold">Algorithm</th>
+                            <th class="border border-green-300 p-3 text-right font-bold">Cost</th>
+                            <th class="border border-green-300 p-3 text-right font-bold">Time (ms)</th>
+                            <th class="border border-green-300 p-3 text-center font-bold">Optimal</th>
+                            <th class="border border-green-300 p-3 text-left font-bold">Mode/Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="comparisonTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="bg-gray-100 text-gray-600 p-6 text-center border-t border-gray-300 text-sm">
+            Click on nodes to select start • Use sliders to adjust objective weights • Compare algorithms for performance analysis
         </footer>
     </div>
 
