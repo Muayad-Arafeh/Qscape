@@ -209,7 +209,10 @@ class QuantumSolver:
                     if cost_matrix[i][j] < np.inf:
                         # ZZ interaction strength proportional to edge cost
                         angle = 2 * gamma * cost_matrix[i][j]
-                        circuit.zz(angle, qr[i], qr[j])
+                        # Implement ZZ gate using CX and RZ gates
+                        circuit.cx(qr[i], qr[j])
+                        circuit.rz(angle, qr[j])
+                        circuit.cx(qr[i], qr[j])
 
             # Self-loop terms (single Z rotations)
             for i in range(num_qubits):
