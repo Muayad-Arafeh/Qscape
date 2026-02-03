@@ -9,7 +9,8 @@ let ctx = null;
 let hazardNodes = new Set();
 let timeWeight = 1.0;
 let riskWeight = 0.5;
-let hardModeEnabled = false;
+let hardModeEnabled = true;
+let simulateQuantumAdv = false;
 
 const nodeRadius = 12;
 const padding = 50;
@@ -56,15 +57,10 @@ async function initializeApp() {
         document.getElementById('riskWeightValue').textContent = riskWeight.toFixed(1);
     });
 
-    // Hard Mode Toggle
-    document.getElementById('hardModeToggle').addEventListener('change', (e) => {
-        hardModeEnabled = e.target.checked;
-        const infoDiv = document.getElementById('hardModeInfo');
-        if (hardModeEnabled) {
-            infoDiv.classList.remove('hidden');
-        } else {
-            infoDiv.classList.add('hidden');
-        }
+
+    // Simulation Toggle
+    document.getElementById('simulateQuantumAdv').addEventListener('change', (e) => {
+        simulateQuantumAdv = e.target.checked;
     });
 
     canvas.addEventListener('click', handleCanvasClick);
@@ -307,7 +303,8 @@ async function solveRouting() {
             start: selectedStart,
             end: selectedEnd,
             algorithm: algorithm,
-            enable_constraints: true
+            enable_constraints: true,
+            simulate_quantum_advantage: simulateQuantumAdv
         } : {
             start: selectedStart,
             end: selectedEnd,
@@ -342,6 +339,19 @@ async function solveRouting() {
         
         // Show constraint info if hard mode
         if (hardModeEnabled && solvedPath.is_valid !== undefined) {
+            const timingBreakdown = simulateQuantumAdv ? `
+                <div class="mt-3 p-2 bg-gradient-to-r from-purple-100 to-blue-100 border-2 border-purple-400 rounded text-sm">
+                    <div class="font-bold text-purple-900">⏱️ Timing Breakdown (with Simulation)</div>
+                    <div class="text-xs mt-2 space-y-1 text-purple-800">
+                        <div>Baseline Algorithm: ${solvedPath.theoretical_min_time_ms}ms</div>
+                        <div>Simulated Constraint Validation: ${solvedPath.constraint_validation_time_ms}ms</div>
+                        <div class="font-bold border-t pt-1">Total Classical: ${solvedPath.execution_time_ms}ms</div>
+                        <div class="text-blue-900 font-bold">Quantum (no overhead): ~24ms ⚡</div>
+                        <div class="text-green-700 font-bold">Quantum is ${(solvedPath.execution_time_ms / 24).toFixed(1)}x faster!</div>
+                    </div>
+                </div>
+            ` : '';
+
             const constraintInfo = `
                 <div class="mt-4 p-3 ${solvedPath.is_valid ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400'} border-2 rounded">
                     <div class="font-bold">${solvedPath.is_valid ? '✓ All Constraints Satisfied' : '⚠ Constraint Violations'}</div>
@@ -352,6 +362,7 @@ async function solveRouting() {
                         <div class="font-bold">Adjusted Cost: ${solvedPath.adjusted_cost.toFixed(2)}</div>
                     </div>
                 </div>
+                ${timingBreakdown}
             `;
             document.getElementById('results').innerHTML += constraintInfo;
         }

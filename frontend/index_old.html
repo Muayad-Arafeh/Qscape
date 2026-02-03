@@ -5,27 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qscape - Quantum Routing</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Toggle Switch Animation */
+        #hardModeToggle:checked ~ div {
+            background-color: #16a34a;
+        }
+        #hardModeToggle:checked ~ div .dot {
+            transform: translateX(1.5rem);
+        }
+        .dot {
+            transition: transform 0.3s ease;
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-purple-600 to-purple-900 min-h-screen">
-    <div class="w-full bg-white shadow-2xl overflow-hidden">
+<body class="bg-gradient-to-br from-purple-600 to-purple-900 min-h-screen p-6">
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
         <!-- Header -->
-        <header class="bg-gradient-to-r from-purple-600 to-purple-800 text-white px-8 py-6">
+        <header class="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-8">
             <h1 class="text-4xl font-bold mb-2">Qscape</h1>
-            <p class="text-lg opacity-90">Quantum-Optimized Evacuation Routing with Constraints</p>
+            <p class="text-lg opacity-90">Quantum-Optimized Evacuation Routing</p>
         </header>
 
         <!-- Main Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 p-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-8">
             <!-- Graph Visualization -->
-            <div class="lg:col-span-3">
-                <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-4 h-[calc(100vh-450px)] min-h-[600px] flex items-center justify-center">
+            <div class="lg:col-span-2">
+                <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-4 h-96 lg:h-full min-h-96 flex items-center justify-center">
                     <canvas id="graphCanvas" class="rounded-lg w-full h-full cursor-crosshair"></canvas>
                 </div>
             </div>
 
             <!-- Controls Sidebar -->
-            <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-6 space-y-4 h-fit">
-                <h2 class="text-xl font-bold text-gray-800">Routing Control</h2>
+            <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-6 space-y-6 h-fit sticky top-8">
+                <h2 class="text-2xl font-bold text-gray-800">Routing Control</h2>
 
                 <!-- Route Selection -->
                 <div class="space-y-4">
@@ -66,46 +78,86 @@
             </div>
         </div>
 
-        <!-- Constraint Controls -->
-        <div class="border-t-2 border-gray-200 px-8 py-6 bg-gradient-to-r from-green-50 to-emerald-50">
-            <div class="mb-6">
-                <h3 class="text-xl font-bold text-gray-800 mb-2">⚡ Constrained Evacuation Routing</h3>
-                <p class="text-sm text-gray-600">All routes must satisfy multi-vehicle capacity, time window, and safety constraints</p>
-            </div>
-            
-            <!-- Constraint Info -->
-            <div class="grid grid-cols-3 gap-3 mb-6">
-                <div class="bg-white p-3 rounded border-l-4 border-purple-500">
-                    <div class="text-xs font-semibold text-gray-600">Vehicle Capacity</div>
-                    <div class="text-lg font-bold text-purple-600">50 👥</div>
+        <!-- Hazard & Constraint Controls -->
+        <div class="border-t-2 border-gray-200 p-8 bg-gray-50">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Hazard & Constraint Management</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Quick Hazard Toggle -->
+                <div>
+                    <label class="block font-semibold text-gray-700 mb-3">Set Hazards on Zones:</label>
+                    <div class="space-y-2">
+                        <button id="hazardZoneB" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition">
+                            Toggle Zone B as Hazard
+                        </button>
+                        <small class="block text-gray-600">Zone B (nodes 6-13) is high-risk</small>
+                    </div>
                 </div>
-                <div class="bg-white p-3 rounded border-l-4 border-blue-500">
-                    <div class="text-xs font-semibold text-gray-600">Available Teams</div>
-                    <div class="text-lg font-bold text-blue-600">3 🚑</div>
-                </div>
-                <div class="bg-white p-3 rounded border-l-4 border-orange-500">
-                    <div class="text-xs font-semibold text-gray-600">Time Limit</div>
-                    <div class="text-lg font-bold text-orange-600">30 min ⏱️</div>
+
+                <!-- Risk Weighting -->
+                <div>
+                    <label class="block font-semibold text-gray-700 mb-3">Objective Weights:</label>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-sm text-gray-600">Time Weight: <span id="timeWeightValue" class="font-bold">1.0</span></label>
+                            <input type="range" id="timeWeight" min="0" max="2" step="0.1" value="1.0" class="w-full h-2 bg-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-600">Risk Weight: <span id="riskWeightValue" class="font-bold">0.5</span></label>
+                            <input type="range" id="riskWeight" min="0" max="2" step="0.1" value="0.5" class="w-full h-2 bg-gray-300 rounded-lg">
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="p-3 bg-green-100 rounded border-l-4 border-green-500 text-sm mb-6">
-                <strong class="text-green-900">💡 Why Quantum Excels:</strong>
-                <p class="text-green-800 text-xs mt-1">Classical algorithms check exponentially many constraint combinations. Quantum explores them all in superposition!</p>
-            </div>
-            
-            <!-- Simulation Toggle -->
-            <div class="p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
-                <label class="flex items-center cursor-pointer mb-2">
-                    <input type="checkbox" id="simulateQuantumAdv" class="mr-3 w-4 h-4">
-                    <span class="font-semibold text-blue-900">🎬 Show Constraint Validation Overhead</span>
-                </label>
-                <p class="text-xs text-blue-700 ml-7">Demonstrates the exponential constraint-checking time classical algorithms would need on larger evacuation networks</p>
+            <!-- Hard Constraint Mode (NEW!) -->
+            <div class="mt-6 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-400 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-lg font-bold text-gray-800">🔥 Hard Constraint Mode</h4>
+                    <label class="flex items-center cursor-pointer">
+                        <div class="relative">
+                            <input type="checkbox" id="hardModeToggle" class="sr-only">
+                            <div class="w-14 h-8 bg-gray-400 rounded-full shadow-inner"></div>
+                            <div class="dot absolute w-6 h-6 bg-white rounded-full shadow left-1 top-1 transition"></div>
+                        </div>
+                        <div class="ml-3 text-gray-700 font-medium">Enable</div>
+                    </label>
+                </div>
+                <div id="hardModeInfo" class="hidden">
+                    <p class="text-sm text-gray-700 mb-2">
+                        <strong>Quantum Advantage Mode:</strong> Adds time windows, capacity limits, and multi-vehicle routing.
+                    </p>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div class="bg-white p-2 rounded">
+                            <div class="font-bold text-gray-600">Vehicle Capacity</div>
+                            <div class="text-lg font-bold text-purple-600">50 👥</div>
+                        </div>
+                        <div class="bg-white p-2 rounded">
+                            <div class="font-bold text-gray-600">Available Teams</div>
+                            <div class="text-lg font-bold text-purple-600">3 🚑</div>
+                        </div>
+                        <div class="bg-white p-2 rounded">
+                            <div class="font-bold text-gray-600">Time Limit</div>
+                            <div class="text-lg font-bold text-purple-600">30 min</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 p-2 bg-yellow-100 rounded text-xs">
+                        <strong>💡 Why Quantum Wins:</strong> Classical algorithms check exponentially many combinations. Quantum explores them in superposition!
+                    </div>
+                    
+                    <!-- Simulation Toggle -->
+                    <div class="mt-3 p-2 bg-blue-50 border-l-4 border-blue-400 rounded">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="checkbox" id="simulateQuantumAdv" class="mr-2 w-4 h-4">
+                            <span class="text-xs font-semibold text-blue-900">🎬 Simulate Constraint Validation Overhead</span>
+                        </label>
+                        <p class="text-xs text-blue-700 mt-1">Shows real constraint-checking time classical would spend on larger graphs</p>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Solution Results -->
-        <div id="results" style="display:none;" class="border-t-2 border-gray-200 px-8 py-6 bg-blue-50">
+        <div id="results" style="display:none;" class="border-t-2 border-gray-200 p-8 bg-blue-50">
             <h3 class="text-xl font-bold text-blue-900 mb-4">Solution</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div class="bg-white rounded-lg border-l-4 border-purple-500 p-4">
@@ -136,7 +188,7 @@
         </div>
 
         <!-- Comparison Results -->
-        <div id="comparison" style="display:none;" class="border-t-2 border-gray-200 px-8 py-6 bg-green-50">
+        <div id="comparison" style="display:none;" class="border-t-2 border-gray-200 p-8 bg-green-50">
             <h3 class="text-xl font-bold text-green-900 mb-4">Algorithm Comparison</h3>
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse text-sm">
@@ -156,7 +208,7 @@
 
         <!-- Footer -->
         <footer class="bg-gray-100 text-gray-600 p-6 text-center border-t border-gray-300 text-sm">
-            Click on nodes to select start/end • Toggle simulation to see constraint validation overhead • Compare algorithms
+            Click on nodes to select start • Use sliders to adjust objective weights • Compare algorithms for performance analysis
         </footer>
     </div>
 

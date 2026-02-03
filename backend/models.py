@@ -82,6 +82,7 @@ class ConstrainedRoutingRequest(BaseModel):
     vehicle_capacity: Optional[int] = None  # Override default
     num_vehicles: Optional[int] = None  # Override default
     time_limit: Optional[int] = None  # Override default
+    simulate_quantum_advantage: bool = False  # Simulate constraint validation overhead for classical
 
 
 class ConstraintViolation(BaseModel):
@@ -109,3 +110,5 @@ class ConstrainedPathResponse(BaseModel):
     population_served: int = 0
     population_left: int = 0
     vehicles_used: int = 1
+    constraint_validation_time_ms: float = 0.0  # Simulated constraint checking time
+    theoretical_min_time_ms: float = 0.0  # Minimum possible without constraints
