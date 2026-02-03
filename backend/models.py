@@ -71,3 +71,41 @@ class HazardUpdate(BaseModel):
 class ConstraintsUpdate(BaseModel):
     blocked_nodes: List[int] = []
     blocked_edges: List[EdgeRef] = []
+
+
+class ConstrainedRoutingRequest(BaseModel):
+    """Request for constrained evacuation routing (hard mode)"""
+    start: int
+    end: int
+    algorithm: str = "quantum"  # Default to quantum for constrained problems
+    enable_constraints: bool = True
+    vehicle_capacity: Optional[int] = None  # Override default
+    num_vehicles: Optional[int] = None  # Override default
+    time_limit: Optional[int] = None  # Override default
+
+
+class ConstraintViolation(BaseModel):
+    """Details about a constraint violation"""
+    type: str  # "capacity", "time_window", "total_time"
+    details: dict
+
+
+class ConstrainedPathResponse(BaseModel):
+    """Response for constrained routing including violation info"""
+    path: List[int]
+    cost: float
+    nodes: List[NodeModel]
+    edges: List[EdgeModel]
+    algorithm: str
+    execution_time_ms: float
+    is_optimal: bool
+    quantum_mode: Optional[str] = None
+    
+    # Constraint-specific fields
+    is_valid: bool  # Does solution satisfy all constraints?
+    violations: List[ConstraintViolation] = []
+    penalty: float = 0.0  # Penalty for violations
+    adjusted_cost: float = 0.0  # Cost + penalty
+    population_served: int = 0
+    population_left: int = 0
+    vehicles_used: int = 1

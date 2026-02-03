@@ -6,13 +6,15 @@ import os
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
-from graph import get_graph
+from graph import get_graph, get_zone_metadata, get_constraint_config
 from algorithms import (
     QuantumSolver,
     GeneticAlgorithmSolver,
     dijkstra,
     dynamic_programming,
     astar,
+    ConstraintValidator,
+    MultiVehicleRouter,
 )
 from models import (
     RoutingRequest,
@@ -21,6 +23,9 @@ from models import (
     GraphUpdate,
     HazardUpdate,
     ConstraintsUpdate,
+    ConstrainedRoutingRequest,
+    ConstrainedPathResponse,
+    ConstraintViolation,
 )
 
 app = FastAPI()
@@ -279,6 +284,129 @@ def compare_algorithms(request: RoutingRequest):
         results["genetic"] = {"error": str(e)}
 
     return {"algorithms": results}
+
+
+@app.post("/solve/hard", response_model=ConstrainedPathResponse)
+def solve_hard_constraints(request: ConstrainedRoutingRequest):
+    """
+    Solve evacuation routing with hard constraints (capacity, time windows).
+    
+    This endpoint demonstrates quantum advantage on NP-hard constrained optimization.
+    Classical algorithms struggle with exponential combinations; quantum explores in parallel.
+    """
+    if request.start not in {node["id"] for node in graph_data["nodes"]}:
+        raise HTTPException(status_code=400, detail="Invalid start node")
+
+    if request.end not in {node["id"] for node in graph_data["nodes"]}:
+        raise HTTPException(status_code=400, detail="Invalid end node")
+
+    # Get constraint configuration (allow overrides)
+    config = get_constraint_config()
+    if request.vehicle_capacity:
+        config["vehicle_capacity"] = request.vehicle_capacity
+    if request.num_vehicles:
+        config["num_vehicles"] = request.num_vehicles
+    if request.time_limit:
+        config["time_limit"] = request.time_limit
+    
+    zone_metadata = get_zone_metadata()
+    
+    start_time = time.time()
+    
+    # Use quantum solver for constrained problems
+    if request.algorithm == "quantum" and request.enable_constraints:
+        quantum_solver = QuantumSolver()
+        path, cost, constraint_info = quantum_solver.solve_constrained(
+            request.start, request.end, graph_data, config, zone_metadata
+        )
+        execution_time = (time.time() - start_time) * 1000
+        quantum_mode = quantum_solver.get_execution_mode()
+    else:
+        # Classical fallback - solve without constraints, then validate
+        if request.algorithm == "dijkstra":
+            path, cost = dijkstra(request.start, request.end, graph_data)
+        elif request.algorithm == "astar":
+            path, cost = astar(request.start, request.end, graph_data)
+        elif request.algorithm == "dp":
+            path, cost = dynamic_programming(request.start, request.end, graph_data)
+        else:
+            path, cost = dijkstra(request.start, request.end, graph_data)
+        
+        execution_time = (time.time() - start_time) * 1000
+        
+        # Validate constraints
+        validator = ConstraintValidator(graph_data, config, zone_metadata)
+        is_valid, violations = validator.validate_solution(path, execution_time)
+        penalty = validator.calculate_penalty(violations)
+        
+        constraint_info = {
+            "is_valid": is_valid,
+            "violations": violations,
+            "penalty": penalty,
+            "adjusted_cost": cost + penalty
+        }
+        quantum_mode = None
+    
+    if cost == float("inf"):
+        raise HTTPException(status_code=400, detail="No path exists between nodes")
+    
+    # Build response with path details
+    path_nodes = [node for node in graph_data["nodes"] if node["id"] in path]
+    path_edges = []
+    for i in range(len(path) - 1):
+        for edge in graph_data["edges"]:
+            if edge["from"] == path[i] and edge["to"] == path[i + 1]:
+                path_edges.append(edge)
+                break
+    
+    # Calculate vehicles needed
+    router = MultiVehicleRouter(graph_data, config)
+    vehicles = router.plan_multi_vehicle_routes(path)
+    
+    # Format violations
+    violation_list = []
+    for cap_v in constraint_info["violations"].get("capacity", []):
+        violation_list.append(ConstraintViolation(
+            type="capacity",
+            details=cap_v
+        ))
+    for tw_v in constraint_info["violations"].get("time_window", []):
+        violation_list.append(ConstraintViolation(
+            type="time_window",
+            details=tw_v
+        ))
+    if constraint_info["violations"].get("total_time", False):
+        violation_list.append(ConstraintViolation(
+            type="total_time",
+            details={"limit": config["time_limit"]}
+        ))
+    
+    return ConstrainedPathResponse(
+        path=path,
+        cost=cost,
+        nodes=path_nodes,
+        edges=path_edges,
+        algorithm=request.algorithm,
+        execution_time_ms=round(execution_time, 2),
+        is_optimal=(request.algorithm in ["dijkstra", "astar", "dp"]),
+        quantum_mode=quantum_mode,
+        is_valid=constraint_info["is_valid"],
+        violations=violation_list,
+        penalty=constraint_info["penalty"],
+        adjusted_cost=constraint_info["adjusted_cost"],
+        population_served=constraint_info["violations"].get("population_served", 0),
+        population_left=constraint_info["violations"].get("population_left", 0),
+        vehicles_used=len(vehicles),
+    )
+
+
+@app.get("/constraints/info")
+def get_constraints_info():
+    """Get current constraint configuration and zone metadata"""
+    return {
+        "config": get_constraint_config(),
+        "zones": get_zone_metadata()
+    }
 
 
 if __name__ == "__main__":

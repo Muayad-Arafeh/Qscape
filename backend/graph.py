@@ -1,36 +1,36 @@
 def get_graph():
     nodes = [
-        # Zone A
-        {"id": 0, "x": 100, "y": 50,  "zone": "A", "hazard": False},
-        {"id": 1, "x": 60,  "y": 100, "zone": "A", "hazard": False},
-        {"id": 2, "x": 140, "y": 100, "zone": "A", "hazard": False},
-        {"id": 3, "x": 100, "y": 150, "zone": "A", "hazard": False},
-        {"id": 4, "x": 160, "y": 150, "zone": "A", "hazard": False},
-        {"id": 5, "x": 120, "y": 200, "zone": "A", "hazard": False},
+        # Zone A - Safe Entry (population: people at each node)
+        {"id": 0, "x": 100, "y": 50,  "zone": "A", "hazard": False, "population": 15, "label": "A0-Entry"},
+        {"id": 1, "x": 60,  "y": 100, "zone": "A", "hazard": False, "population": 8,  "label": "A1"},
+        {"id": 2, "x": 140, "y": 100, "zone": "A", "hazard": False, "population": 12, "label": "A2"},
+        {"id": 3, "x": 100, "y": 150, "zone": "A", "hazard": False, "population": 10, "label": "A3"},
+        {"id": 4, "x": 160, "y": 150, "zone": "A", "hazard": False, "population": 7,  "label": "A4"},
+        {"id": 5, "x": 120, "y": 200, "zone": "A", "hazard": False, "population": 9,  "label": "A5"},
 
-        # Zone B (high risk)
-        {"id": 6,  "x": 120, "y": 260, "zone": "B", "hazard": False},
-        {"id": 7,  "x": 80,  "y": 310, "zone": "B", "hazard": False},
-        {"id": 8,  "x": 160, "y": 310, "zone": "B", "hazard": False},
-        {"id": 9,  "x": 120, "y": 360, "zone": "B", "hazard": False},
-        {"id": 10, "x": 60,  "y": 360, "zone": "B", "hazard": False},
-        {"id": 11, "x": 180, "y": 360, "zone": "B", "hazard": False},
-        {"id": 12, "x": 120, "y": 410, "zone": "B", "hazard": False},
-        {"id": 13, "x": 120, "y": 460, "zone": "B", "hazard": False},
+        # Zone B - Danger Zone (high population, high risk)
+        {"id": 6,  "x": 120, "y": 260, "zone": "B", "hazard": False, "population": 25, "label": "B6"},
+        {"id": 7,  "x": 80,  "y": 310, "zone": "B", "hazard": False, "population": 18, "label": "B7"},
+        {"id": 8,  "x": 160, "y": 310, "zone": "B", "hazard": False, "population": 20, "label": "B8"},
+        {"id": 9,  "x": 120, "y": 360, "zone": "B", "hazard": False, "population": 22, "label": "B9"},
+        {"id": 10, "x": 60,  "y": 360, "zone": "B", "hazard": False, "population": 16, "label": "B10"},
+        {"id": 11, "x": 180, "y": 360, "zone": "B", "hazard": False, "population": 19, "label": "B11"},
+        {"id": 12, "x": 120, "y": 410, "zone": "B", "hazard": False, "population": 23, "label": "B12"},
+        {"id": 13, "x": 120, "y": 460, "zone": "B", "hazard": False, "population": 21, "label": "B13"},
 
-        # Zone C
-        {"id": 14, "x": 70,  "y": 520, "zone": "C", "hazard": False},
-        {"id": 15, "x": 170, "y": 520, "zone": "C", "hazard": False},
-        {"id": 16, "x": 50,  "y": 580, "zone": "C", "hazard": False},
-        {"id": 17, "x": 100, "y": 580, "zone": "C", "hazard": False},
-        {"id": 18, "x": 190, "y": 580, "zone": "C", "hazard": False},
-        {"id": 19, "x": 120, "y": 640, "zone": "C", "hazard": False},
-        {"id": 20, "x": 80,  "y": 700, "zone": "C", "hazard": False},
-        {"id": 21, "x": 160, "y": 700, "zone": "C", "hazard": False},
+        # Zone C - Safe Corridor
+        {"id": 14, "x": 70,  "y": 520, "zone": "C", "hazard": False, "population": 11, "label": "C14"},
+        {"id": 15, "x": 170, "y": 520, "zone": "C", "hazard": False, "population": 13, "label": "C15"},
+        {"id": 16, "x": 50,  "y": 580, "zone": "C", "hazard": False, "population": 9,  "label": "C16"},
+        {"id": 17, "x": 100, "y": 580, "zone": "C", "hazard": False, "population": 10, "label": "C17"},
+        {"id": 18, "x": 190, "y": 580, "zone": "C", "hazard": False, "population": 8,  "label": "C18"},
+        {"id": 19, "x": 120, "y": 640, "zone": "C", "hazard": False, "population": 12, "label": "C19"},
+        {"id": 20, "x": 80,  "y": 700, "zone": "C", "hazard": False, "population": 7,  "label": "C20"},
+        {"id": 21, "x": 160, "y": 700, "zone": "C", "hazard": False, "population": 6,  "label": "C21"},
 
-        # Exit
-        {"id": 22, "x": 120, "y": 760, "zone": "EXIT", "hazard": False},
-        {"id": 23, "x": 120, "y": 820, "zone": "EXIT", "hazard": False},
+        # Exit Zone
+        {"id": 22, "x": 120, "y": 760, "zone": "EXIT", "hazard": False, "population": 0, "label": "Exit-22"},
+        {"id": 23, "x": 120, "y": 820, "zone": "EXIT", "hazard": False, "population": 0, "label": "Exit-23"},
     ]
 
     edges = [
@@ -79,4 +79,45 @@ def get_graph():
         "edges": edges,
         "start": 0,
         "end": 23
+    }
+
+
+def get_zone_metadata():
+    """Return zone-specific constraints and properties"""
+    return {
+        "A": {
+            "name": "Safe Entry Zone",
+            "color": "#4ade80",  # green
+            "time_window": {"min": 0, "max": 10},  # minutes
+            "description": "Initial safe zone - must evacuate within 10 minutes"
+        },
+        "B": {
+            "name": "Danger Zone",
+            "color": "#f87171",  # red
+            "time_window": {"min": 5, "max": 15},  # minutes
+            "description": "High-risk area - limited time window"
+        },
+        "C": {
+            "name": "Safe Corridor",
+            "color": "#60a5fa",  # blue
+            "time_window": {"min": 10, "max": 20},  # minutes
+            "description": "Transit zone towards exit"
+        },
+        "EXIT": {
+            "name": "Exit Zone",
+            "color": "#a78bfa",  # purple
+            "time_window": {"min": 0, "max": 30},  # minutes
+            "description": "Final evacuation point"
+        }
+    }
+
+
+def get_constraint_config():
+    """Hard constraints for evacuation problem"""
+    return {
+        "vehicle_capacity": 50,  # people per rescue vehicle
+        "num_vehicles": 3,  # available rescue teams
+        "total_population": 301,  # sum of all node populations
+        "time_limit": 30,  # minutes to complete evacuation
+        "constraint_penalty": 1000,  # penalty weight for constraint violations
     }
