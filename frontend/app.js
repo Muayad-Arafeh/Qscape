@@ -9,6 +9,7 @@ let ctx = null;
 let hazardNodes = new Set();
 let timeWeight = 1.0;
 let riskWeight = 0.5;
+let hardModeEnabled = false;
 
 const nodeRadius = 12;
 const padding = 50;
@@ -55,6 +56,17 @@ async function initializeApp() {
         document.getElementById('riskWeightValue').textContent = riskWeight.toFixed(1);
     });
 
+    // Hard Mode Toggle
+    document.getElementById('hardModeToggle').addEventListener('change', (e) => {
+        hardModeEnabled = e.target.checked;
+        const infoDiv = document.getElementById('hardModeInfo');
+        if (hardModeEnabled) {
+            infoDiv.classList.remove('hidden');
+        } else {
+            infoDiv.classList.add('hidden');
+        }
+    });
+
     canvas.addEventListener('click', handleCanvasClick);
 }
 
@@ -87,8 +99,78 @@ function drawGraph() {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    drawZones();  // Draw zone backgrounds first
     drawEdges();
     drawNodes();
+    drawLegend();  // Draw legend
+}
+
+function drawZones() {
+    // Define zone boundaries based on node Y coordinates
+    const zones = {
+        'A': { minY: 0, maxY: 220, color: 'rgba(74, 222, 128, 0.1)', label: 'ZONE A - Safe Entry' },
+        'B': { minY: 220, maxY: 480, color: 'rgba(248, 113, 113, 0.15)', label: 'ZONE B - Danger Zone' },
+        'C': { minY: 480, maxY: 730, color: 'rgba(96, 165, 250, 0.1)', label: 'ZONE C - Safe Corridor' },
+        'EXIT': { minY: 730, maxY: 900, color: 'rgba(167, 139, 250, 0.1)', label: 'EXIT ZONE' }
+    };
+
+    Object.entries(zones).forEach(([zoneId, zone]) => {
+        ctx.fillStyle = zone.color;
+        ctx.fillRect(0, zone.minY * canvas.height / 900, canvas.width, (zone.maxY - zone.minY) * canvas.height / 900);
+        
+        // Zone label
+        ctx.fillStyle = '#333333';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(zone.label, 10, (zone.minY + 20) * canvas.height / 900);
+    });
+}
+
+function drawLegend() {
+    const legendX = canvas.width - 180;
+    const legendY = 20;
+    const lineHeight = 20;
+
+    // Background
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(legendX - 10, legendY - 10, 170, 160);
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(legendX - 10, legendY - 10, 170, 160);
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Legend', legendX, legendY);
+
+    let y = legendY + lineHeight;
+
+    // Legend items
+    const items = [
+        { color: '#51cf66', label: 'Start Node' },
+        { color: '#ff6b6b', label: 'End Node' },
+        { color: '#667eea', label: 'Normal Node' },
+        { color: '#ffd43b', label: 'Path Node' },
+        { color: '#ff6b6b', label: 'Hazard' },
+        { color: '#000000', label: 'Blocked' },
+    ];
+
+    items.forEach(item => {
+        // Draw color square
+        ctx.fillStyle = item.color;
+        ctx.fillRect(legendX, y - 8, 12, 12);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(legendX, y - 8, 12, 12);
+
+        // Draw label
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.fillText(item.label, legendX + 18, y);
+
+        y += lineHeight;
+    });
 }
 
 function drawEdges() {
@@ -164,11 +246,26 @@ function drawNodes() {
         ctx.lineWidth = 2;
         ctx.stroke();
 
+        // Node ID label
         ctx.fillStyle = textColor;
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(node.id, coords.x, coords.y);
+
+        // Node label and population (below node)
+        if (node.label) {
+            ctx.fillStyle = '#333333';
+            ctx.font = '10px Arial';
+            ctx.fillText(node.label, coords.x, coords.y + nodeRadius + 10);
+            
+            // Show population
+            if (node.population) {
+                ctx.fillStyle = '#666666';
+                ctx.font = '9px Arial';
+                ctx.fillText(`👥${node.population}`, coords.x, coords.y + nodeRadius + 20);
+            }
+        }
     });
 
     ctx.globalAlpha = 1;
@@ -203,19 +300,29 @@ async function solveRouting() {
     try {
         const algorithm = document.getElementById('algorithmSelect').value;
 
-        const response = await fetch(`${API_BASE}/solve`, {
+        // Use hard constraint endpoint if hard mode enabled
+        const endpoint = hardModeEnabled ? `${API_BASE}/solve/hard` : `${API_BASE}/solve`;
+        
+        const requestBody = hardModeEnabled ? {
+            start: selectedStart,
+            end: selectedEnd,
+            algorithm: algorithm,
+            enable_constraints: true
+        } : {
+            start: selectedStart,
+            end: selectedEnd,
+            algorithm: algorithm,
+            avoid_hazards: false,
+            risk_weight: riskWeight,
+            hazard_weight: 0.0
+        };
+
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                start: selectedStart,
-                end: selectedEnd,
-                algorithm: algorithm,
-                avoid_hazards: false,
-                risk_weight: riskWeight,
-                hazard_weight: 0.0
-            })
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -232,6 +339,23 @@ async function solveRouting() {
         document.getElementById('costDisplay').textContent = solvedPath.cost.toFixed(2);
         document.getElementById('optimalDisplay').textContent = solvedPath.is_optimal ? '✓ Optimal' : '⚠ Heuristic';
         document.getElementById('quantumModeDisplay').textContent = solvedPath.quantum_mode || '—';
+        
+        // Show constraint info if hard mode
+        if (hardModeEnabled && solvedPath.is_valid !== undefined) {
+            const constraintInfo = `
+                <div class="mt-4 p-3 ${solvedPath.is_valid ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400'} border-2 rounded">
+                    <div class="font-bold">${solvedPath.is_valid ? '✓ All Constraints Satisfied' : '⚠ Constraint Violations'}</div>
+                    <div class="text-sm mt-2">
+                        <div>Population Served: ${solvedPath.population_served} / ${solvedPath.population_served + solvedPath.population_left}</div>
+                        <div>Vehicles Used: ${solvedPath.vehicles_used} / 3</div>
+                        <div>Penalty: +${solvedPath.penalty.toFixed(0)}</div>
+                        <div class="font-bold">Adjusted Cost: ${solvedPath.adjusted_cost.toFixed(2)}</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('results').innerHTML += constraintInfo;
+        }
+        
         document.getElementById('results').style.display = 'block';
         document.getElementById('comparison').style.display = 'none';
     } catch (error) {
