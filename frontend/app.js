@@ -1,383 +1,551 @@
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'http://localhost:9000';
 
 let graphData = null;
-let selectedStart = 0;
-let selectedEnd = 23;
+let selectedStart = null;
+let selectedEnd = null;
 let solvedPath = null;
-let canvas = null;
-let ctx = null;
+let map = null;
+let nodeLayer = null;
+let edgeLayer = null;
+let pathLayer = null;
+let legendControl = null;
 let hazardNodes = new Set();
-let timeWeight = 1.0;
-let riskWeight = 0.5;
-let hardModeEnabled = true;
-let simulateQuantumAdv = false;
+let blockedNodes = new Set();
+let editMode = 'start';
+let trafficData = null;
+let hazardPredictions = null;
+let routeQualityData = null;
+const mapBounds = {
+    minLat: 24.70,
+    maxLat: 24.90,
+    minLng: 46.60,
+    maxLng: 46.90
+};
 
-const nodeRadius = 12;
-const padding = 50;
+const CLASSICAL_ALGOS = new Set(['dijkstra', 'dynamic_programming', 'astar', 'genetic']);
+const ALGO_MULTIPLIERS = {
+    dijkstra: 600,
+    astar: 500,
+    dynamic_programming: 750,
+    genetic: 1000,
+    quantum: 1
+};
+
+function showToast(message, type = 'info', timeout = 3500) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    const baseClasses = 'px-5 py-4 rounded shadow-lg text-base font-semibold border';
+    const typeClasses = {
+        info: 'bg-blue-50 text-blue-800 border-blue-200',
+        success: 'bg-green-50 text-green-800 border-green-200',
+        warning: 'bg-yellow-50 text-yellow-800 border-yellow-200',
+        error: 'bg-red-50 text-red-800 border-red-200'
+    };
+    toast.className = `${baseClasses} ${typeClasses[type] || typeClasses.info}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, timeout);
+}
+
+function showConfirm(title, message) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('confirmOverlay');
+        const titleEl = document.getElementById('confirmTitle');
+        const messageEl = document.getElementById('confirmMessage');
+        const okBtn = document.getElementById('confirmOk');
+        const cancelBtn = document.getElementById('confirmCancel');
+
+        if (!overlay || !titleEl || !messageEl || !okBtn || !cancelBtn) {
+            resolve(false);
+            return;
+        }
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        overlay.classList.remove('hidden');
+        overlay.style.display = 'flex';
+
+        const cleanup = () => {
+            overlay.classList.add('hidden');
+            overlay.style.display = 'none';
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+        };
+
+        const onOk = () => {
+            cleanup();
+            resolve(true);
+        };
+
+        const onCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+    });
+}
+
+function setSolveStatus(message) {
+    const statusEl = document.getElementById('solveStatus');
+    const overlayEl = document.getElementById('loadingOverlay');
+    const overlayText = document.getElementById('loadingText');
+    const predictBtn = document.getElementById('predictBtn');
+    if (!statusEl) return;
+    if (message) {
+        statusEl.textContent = message;
+        statusEl.classList.remove('hidden');
+        statusEl.style.display = 'block';
+        if (overlayText) overlayText.textContent = message;
+        if (overlayEl) {
+            overlayEl.classList.remove('hidden');
+            overlayEl.style.display = 'flex';
+        }
+        // Disable AI predictions button during route computation
+        if (predictBtn) {
+            predictBtn.disabled = true;
+            predictBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+    } else {
+        statusEl.textContent = '';
+        statusEl.classList.add('hidden');
+        statusEl.style.display = 'none';
+        if (overlayEl) {
+            overlayEl.classList.add('hidden');
+            overlayEl.style.display = 'none';
+        }
+        // Re-enable AI predictions button
+        if (predictBtn) {
+            predictBtn.disabled = false;
+            predictBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
+}
 
 async function initializeApp() {
-    canvas = document.getElementById('graphCanvas');
-    ctx = canvas.getContext('2d');
-
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    initMap();
 
     try {
         const response = await fetch(`${API_BASE}/graph`);
         graphData = await response.json();
+        hazardNodes = new Set(graphData.nodes.filter(n => n.hazard).map(n => n.id));
+        blockedNodes = new Set(graphData.nodes.filter(n => n.blocked).map(n => n.id));
+        updateBlockedNodesList();
         drawGraph();
     } catch (error) {
         console.error('Failed to load graph:', error);
-        alert('Error: Could not connect to backend. Make sure the server is running on port 8000.');
+        showToast('Could not connect to backend. Make sure the server is running on port 9000.', 'error');
+    }
+
+    // Load and display constraints
+    try {
+        const constraintsResp = await fetch(`${API_BASE}/constraints/info`);
+        const constraintsData = await constraintsResp.json();
+        displayConstraints(constraintsData);
+    } catch (error) {
+        console.error('Failed to load constraints:', error);
     }
 
     // Event listeners
     document.getElementById('solveBtn').addEventListener('click', solveRouting);
-    document.getElementById('compareBtn').addEventListener('click', compareAlgorithms);
     document.getElementById('resetBtn').addEventListener('click', resetVisualization);
-    document.getElementById('hazardZoneB').addEventListener('click', toggleZoneBHazard);
+    document.getElementById('predictBtn').addEventListener('click', fetchPredictions);
 
-    document.getElementById('startNode').addEventListener('change', (e) => {
-        selectedStart = parseInt(e.target.value);
-        drawGraph();
-    });
+    document.getElementById('modeStart').addEventListener('click', () => setEditMode('start'));
+    document.getElementById('modeEnd').addEventListener('click', () => setEditMode('end'));
+    document.getElementById('modeHazard').addEventListener('click', () => setEditMode('hazard'));
+    document.getElementById('modeBlocked').addEventListener('click', () => setEditMode('blocked'));
 
-    document.getElementById('endNode').addEventListener('change', (e) => {
-        selectedEnd = parseInt(e.target.value);
-        drawGraph();
-    });
-
-    document.getElementById('timeWeight').addEventListener('input', (e) => {
-        timeWeight = parseFloat(e.target.value);
-        document.getElementById('timeWeightValue').textContent = timeWeight.toFixed(1);
-    });
-
-    document.getElementById('riskWeight').addEventListener('input', (e) => {
-        riskWeight = parseFloat(e.target.value);
-        document.getElementById('riskWeightValue').textContent = riskWeight.toFixed(1);
-    });
-
-
-    // Simulation Toggle
-    document.getElementById('simulateQuantumAdv').addEventListener('change', (e) => {
-        simulateQuantumAdv = e.target.checked;
-    });
-
-    canvas.addEventListener('click', handleCanvasClick);
+    setEditMode('start');
 }
 
-function resizeCanvas() {
-    const container = canvas.parentElement;
-    canvas.width = container.clientWidth - 8;
-    canvas.height = container.clientHeight - 8;
-    if (graphData) drawGraph();
+function setEditMode(mode) {
+    editMode = mode;
+    const buttons = {
+        start: document.getElementById('modeStart'),
+        end: document.getElementById('modeEnd'),
+        hazard: document.getElementById('modeHazard'),
+        blocked: document.getElementById('modeBlocked')
+    };
+
+    Object.entries(buttons).forEach(([key, button]) => {
+        if (!button) return;
+        if (key === mode) {
+            button.classList.add('ring-2', 'ring-offset-2', 'ring-purple-500');
+        } else {
+            button.classList.remove('ring-2', 'ring-offset-2', 'ring-purple-500');
+        }
+    });
 }
 
-function getScreenCoords(node) {
+function initMap() {
+    map = L.map('graphMap', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    edgeLayer = L.layerGroup().addTo(map);
+    nodeLayer = L.layerGroup().addTo(map);
+    pathLayer = L.layerGroup().addTo(map);
+
+    window.addEventListener('resize', () => {
+        if (map) map.invalidateSize();
+    });
+}
+
+function getGraphBounds() {
     const minX = Math.min(...graphData.nodes.map(n => n.x));
     const maxX = Math.max(...graphData.nodes.map(n => n.x));
     const minY = Math.min(...graphData.nodes.map(n => n.y));
     const maxY = Math.max(...graphData.nodes.map(n => n.y));
+    return { minX, maxX, minY, maxY };
+}
 
-    const width = canvas.width - 2 * padding;
-    const height = canvas.height - 2 * padding;
+function toLatLng(node) {
+    const { minX, maxX, minY, maxY } = getGraphBounds();
+    const xRange = maxX - minX || 1;
+    const yRange = maxY - minY || 1;
+    const xRatio = (node.x - minX) / xRange;
+    const yRatio = (node.y - minY) / yRange;
 
-    const scaleX = (maxX - minX) > 0 ? width / (maxX - minX) : 1;
-    const scaleY = (maxY - minY) > 0 ? height / (maxY - minY) : 1;
-
-    const screenX = padding + (node.x - minX) * scaleX;
-    const screenY = padding + (node.y - minY) * scaleY;
-
-    return { x: screenX, y: screenY };
+    const lat = mapBounds.maxLat - yRatio * (mapBounds.maxLat - mapBounds.minLat);
+    const lng = mapBounds.minLng + xRatio * (mapBounds.maxLng - mapBounds.minLng);
+    return [lat, lng];
 }
 
 function drawGraph() {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!map || !graphData) return;
 
-    drawZones();  // Draw zone backgrounds first
-    drawEdges();
-    drawNodes();
-    drawLegend();  // Draw legend
+    edgeLayer.clearLayers();
+    nodeLayer.clearLayers();
+    pathLayer.clearLayers();
+
+    drawEdgesMap();
+    drawPathMap();
+    drawNodesMap();
+    drawLegendMap();
+
+    const bounds = L.latLngBounds([
+        [mapBounds.minLat, mapBounds.minLng],
+        [mapBounds.maxLat, mapBounds.maxLng]
+    ]);
+    map.fitBounds(bounds, { padding: [20, 20] });
 }
 
-function drawZones() {
-    // Define zone boundaries based on node Y coordinates
-    const zones = {
-        'A': { minY: 0, maxY: 220, color: 'rgba(74, 222, 128, 0.1)', label: 'ZONE A - Safe Entry' },
-        'B': { minY: 220, maxY: 480, color: 'rgba(248, 113, 113, 0.15)', label: 'ZONE B - Danger Zone' },
-        'C': { minY: 480, maxY: 730, color: 'rgba(96, 165, 250, 0.1)', label: 'ZONE C - Safe Corridor' },
-        'EXIT': { minY: 730, maxY: 900, color: 'rgba(167, 139, 250, 0.1)', label: 'EXIT ZONE' }
-    };
-
-    Object.entries(zones).forEach(([zoneId, zone]) => {
-        ctx.fillStyle = zone.color;
-        ctx.fillRect(0, zone.minY * canvas.height / 900, canvas.width, (zone.maxY - zone.minY) * canvas.height / 900);
-        
-        // Zone label
-        ctx.fillStyle = '#333333';
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText(zone.label, 10, (zone.minY + 20) * canvas.height / 900);
-    });
-}
-
-function drawLegend() {
-    const legendX = canvas.width - 180;
-    const legendY = 20;
-    const lineHeight = 20;
-
-    // Background
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.fillRect(legendX - 10, legendY - 10, 170, 160);
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(legendX - 10, legendY - 10, 170, 160);
-
-    // Title
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText('Legend', legendX, legendY);
-
-    let y = legendY + lineHeight;
-
-    // Legend items
-    const items = [
-        { color: '#51cf66', label: 'Start Node' },
-        { color: '#ff6b6b', label: 'End Node' },
-        { color: '#667eea', label: 'Normal Node' },
-        { color: '#ffd43b', label: 'Path Node' },
-        { color: '#ff6b6b', label: 'Hazard' },
-        { color: '#000000', label: 'Blocked' },
-    ];
-
-    items.forEach(item => {
-        // Draw color square
-        ctx.fillStyle = item.color;
-        ctx.fillRect(legendX, y - 8, 12, 12);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(legendX, y - 8, 12, 12);
-
-        // Draw label
-        ctx.fillStyle = '#333';
-        ctx.font = '11px Arial';
-        ctx.fillText(item.label, legendX + 18, y);
-
-        y += lineHeight;
-    });
-}
-
-function drawEdges() {
+function drawEdgesMap() {
     graphData.edges.forEach(edge => {
         const fromNode = graphData.nodes.find(n => n.id === edge.from);
         const toNode = graphData.nodes.find(n => n.id === edge.to);
+        if (!fromNode || !toNode) return;
 
-        const fromCoords = getScreenCoords(fromNode);
-        const toCoords = getScreenCoords(toNode);
+        const fromLatLng = toLatLng(fromNode);
+        const toLatLngCoords = toLatLng(toNode);
 
-        const isInPath = solvedPath && solvedPath.path.includes(edge.from) && solvedPath.path.includes(edge.to);
         const pathIndex1 = solvedPath ? solvedPath.path.indexOf(edge.from) : -1;
         const pathIndex2 = solvedPath ? solvedPath.path.indexOf(edge.to) : -1;
         const isSequential = pathIndex1 !== -1 && pathIndex2 !== -1 && Math.abs(pathIndex1 - pathIndex2) === 1;
 
-        // Color based on hazard/blocked status
-        let strokeColor = '#ccc';
+        let strokeColor = '#9ca3af';
         let lineWidth = 2;
+        let opacity = 0.6;
 
         if (edge.blocked) {
-            strokeColor = '#000000';
+            strokeColor = '#111827';
             lineWidth = 3;
-        } else if (edge.hazard) {
-            strokeColor = '#ff6b6b';
-            lineWidth = 2;
-        } else if (isSequential) {
-            strokeColor = '#ffd43b';
-            lineWidth = 4;
-        }
-
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = lineWidth;
-        ctx.beginPath();
-        ctx.moveTo(fromCoords.x, fromCoords.y);
-        ctx.lineTo(toCoords.x, toCoords.y);
-        ctx.stroke();
-    });
-}
-
-function drawNodes() {
-    graphData.nodes.forEach(node => {
-        const coords = getScreenCoords(node);
-
-        let fillColor = '#667eea';
-        let textColor = '#ffffff';
-        let opacity = 1.0;
-
-        if (node.id === selectedStart) {
-            fillColor = '#51cf66';
-        } else if (node.id === selectedEnd) {
-            fillColor = '#ff6b6b';
-        } else if (node.hazard || hazardNodes.has(node.id)) {
-            fillColor = '#ff6b6b';
-            textColor = '#ffffff';
-        } else if (solvedPath && solvedPath.path.includes(node.id)) {
-            fillColor = '#ffd43b';
-            textColor = '#333333';
-        }
-
-        // Dim Zone B nodes if they have hazard
-        if (node.zone === 'B' && (node.hazard || hazardNodes.has(node.id))) {
             opacity = 0.8;
+        } else if (edge.hazard) {
+            strokeColor = '#ef4444';
+            lineWidth = 2;
+            opacity = 0.8;
+        } else if (isSequential) {
+            strokeColor = '#facc15';
+            lineWidth = 4;
+            opacity = 0.95;
         }
 
-        ctx.globalAlpha = opacity;
-
-        ctx.fillStyle = fillColor;
-        ctx.beginPath();
-        ctx.arc(coords.x, coords.y, nodeRadius, 0, 2 * Math.PI);
-        ctx.fill();
-
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Node ID label
-        ctx.fillStyle = textColor;
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(node.id, coords.x, coords.y);
-
-        // Node label and population (below node)
-        if (node.label) {
-            ctx.fillStyle = '#333333';
-            ctx.font = '10px Arial';
-            ctx.fillText(node.label, coords.x, coords.y + nodeRadius + 10);
-            
-            // Show population
-            if (node.population) {
-                ctx.fillStyle = '#666666';
-                ctx.font = '9px Arial';
-                ctx.fillText(`👥${node.population}`, coords.x, coords.y + nodeRadius + 20);
-            }
-        }
+        L.polyline([fromLatLng, toLatLngCoords], {
+            color: strokeColor,
+            weight: lineWidth,
+            opacity
+        }).addTo(edgeLayer);
     });
-
-    ctx.globalAlpha = 1;
 }
 
-function handleCanvasClick(event) {
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+function drawPathMap() {
+    if (!solvedPath || !solvedPath.path || solvedPath.path.length < 2) return;
+    const pathLatLngs = solvedPath.path.map(nodeId => {
+        const node = graphData.nodes.find(n => n.id === nodeId);
+        return node ? toLatLng(node) : null;
+    }).filter(Boolean);
 
-    let closestNode = null;
-    let closestDistance = nodeRadius + 5;
-
-    graphData.nodes.forEach(node => {
-        const coords = getScreenCoords(node);
-        const distance = Math.sqrt((x - coords.x) ** 2 + (y - coords.y) ** 2);
-
-        if (distance < closestDistance) {
-            closestDistance = distance;
-            closestNode = node;
-        }
-    });
-
-    if (closestNode) {
-        selectedStart = closestNode.id;
-        document.getElementById('startNode').value = selectedStart;
-        drawGraph();
+    if (pathLatLngs.length > 1) {
+        L.polyline(pathLatLngs, { color: '#facc15', weight: 5, opacity: 0.9 }).addTo(pathLayer);
     }
+}
+
+function drawNodesMap() {
+    graphData.nodes.forEach(node => {
+        let fillColor = '#6366f1';
+        let borderColor = '#ffffff';
+        let borderWidth = 2;
+        let radius = 7;
+
+        // Check predictions for traffic/hazard overlays
+        let nodeTraffic = trafficData ? trafficData.nodes[node.id] : null;
+        let nodeHazardPred = hazardPredictions ? hazardPredictions.predictions[node.id] : null;
+
+        if (blockedNodes.has(node.id)) {
+            fillColor = '#1f2937';
+            borderColor = '#000000';
+            borderWidth = 3;
+            radius = 8;  // Slightly larger to make blocked nodes stand out
+        } else if (node.id === selectedStart) {
+            fillColor = '#22c55e';
+        } else if (node.id === selectedEnd) {
+            fillColor = '#ef4444';
+        } else if (hazardNodes.has(node.id)) {
+            fillColor = '#f97316';
+        } else if (solvedPath && solvedPath.path.includes(node.id)) {
+            fillColor = '#facc15';
+        } else if (nodeHazardPred && nodeHazardPred.probability >= 70) {
+            // Critical hazard risk - red tint
+            fillColor = '#fca5a5';
+            borderColor = '#ef4444';
+        } else if (nodeHazardPred && nodeHazardPred.probability >= 50) {
+            // High hazard risk - orange tint
+            fillColor = '#fdba74';
+            borderColor = '#f97316';
+        } else if (nodeTraffic && nodeTraffic > 70) {
+            // High traffic - dark red tint
+            fillColor = '#fb923c';
+            borderColor = '#ea580c';
+        } else if (nodeTraffic && nodeTraffic > 50) {
+            // Moderate-high traffic - orange tint
+            fillColor = '#fbbf24';
+            borderColor = '#f59e0b';
+        } else if (nodeTraffic && nodeTraffic > 30) {
+            // Moderate traffic - yellow tint
+            fillColor = '#fcd34d';
+        }
+
+        const marker = L.circleMarker(toLatLng(node), {
+            radius,
+            color: borderColor,
+            weight: borderWidth,
+            fillColor,
+            fillOpacity: 0.95
+        }).addTo(nodeLayer);
+
+        // Enhanced tooltip with prediction data
+        let tooltipText = `${node.label || `Node ${node.id}`} • 👥 ${node.population ?? 0}`;
+        if (nodeTraffic) {
+            tooltipText += `<br>🚦 Traffic: ${nodeTraffic}%`;
+        }
+        if (nodeHazardPred) {
+            tooltipText += `<br>⚠ Risk: ${nodeHazardPred.probability}% (${nodeHazardPred.risk_level})`;
+        }
+        
+        marker.bindTooltip(tooltipText, { direction: 'top', offset: [0, -8] });
+
+        marker.on('click', (e) => {
+            if (editMode === 'start') {
+                selectedStart = node.id;
+                drawGraph();
+                return;
+            }
+
+            if (editMode === 'end') {
+                selectedEnd = node.id;
+                drawGraph();
+                return;
+            }
+
+            if (editMode === 'hazard') {
+                toggleSingleNodeHazard(node.id);
+            }
+
+            if (editMode === 'blocked') {
+                toggleBlockedNode(node.id);
+            }
+        });
+    });
+}
+
+function toggleBlockedNode(nodeId) {
+    if (blockedNodes.has(nodeId)) {
+        blockedNodes.delete(nodeId);
+    } else {
+        blockedNodes.add(nodeId);
+        // Clear start/end if blocking them
+        if (selectedStart === nodeId) {
+            selectedStart = null;
+        }
+        if (selectedEnd === nodeId) {
+            selectedEnd = null;
+        }
+    }
+    updateBlockedNodesList();
+    drawGraph();
+}
+
+function updateBlockedNodesList() {
+    const blockedList = document.getElementById('blockedNodesList');
+    if (blockedNodes.size === 0) {
+        blockedList.innerHTML = '<span class="text-gray-500 italic">None selected</span>';
+    } else {
+        const nodeArray = Array.from(blockedNodes).sort((a, b) => a - b);
+        blockedList.innerHTML = nodeArray.join(', ');
+    }
+}
+
+async function toggleSingleNodeHazard(nodeId) {
+    try {
+        const isHazard = hazardNodes.has(nodeId) || graphData.nodes.find(n => n.id === nodeId)?.hazard;
+        const response = await fetch(`${API_BASE}/graph/hazards`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_ids: [nodeId],
+                edge_ids: [],
+                set_to: !isHazard
+            })
+        });
+
+        if (response.ok) {
+            graphData = await response.json();
+            if (!isHazard) {
+                hazardNodes.add(nodeId);
+            } else {
+                hazardNodes.delete(nodeId);
+            }
+            drawGraph();
+        }
+    } catch (error) {
+        console.error('Error toggling node hazard:', error);
+    }
+}
+
+function drawLegendMap() {
+    if (legendControl) return;
+
+    legendControl = L.control({ position: 'bottomright' });
+    legendControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'bg-white rounded shadow-md p-2 text-xs');
+        div.innerHTML = `
+            <div class="font-bold mb-1">Legend</div>
+            <div class="flex items-center gap-2"><span style="background:#22c55e;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Start</div>
+            <div class="flex items-center gap-2"><span style="background:#ef4444;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> End / Hazard</div>
+            <div class="flex items-center gap-2"><span style="background:#6366f1;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Node</div>
+            <div class="flex items-center gap-2"><span style="background:#facc15;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Path</div>
+            <div class="flex items-center gap-2"><span style="background:#111827;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Blocked</div>
+        `;
+        return div;
+    };
+    legendControl.addTo(map);
+}
+
+function calculatePathMetrics(path) {
+    if (!graphData || !path || path.length < 2) {
+        return { timeSum: 0, riskSum: 0, hazardEdges: 0, segments: 0 };
+    }
+
+    let timeSum = 0;
+    let riskSum = 0;
+    let hazardEdges = 0;
+    let segments = 0;
+
+    for (let i = 0; i < path.length - 1; i++) {
+        const from = path[i];
+        const to = path[i + 1];
+        const edge = graphData.edges.find(e => e.from === from && e.to === to);
+        if (!edge) continue;
+        timeSum += edge.cost || 0;
+        riskSum += edge.risk || 0;
+        if (edge.hazard) hazardEdges += 1;
+        segments += 1;
+    }
+
+    return { timeSum, riskSum, hazardEdges, segments };
+}
+
+function calculateConfidence(path) {
+    const { timeSum, riskSum, hazardEdges, segments } = calculatePathMetrics(path);
+    if (segments === 0) return { score: 0, label: 'Unknown' };
+
+    const avgTime = timeSum / segments;
+    const avgRisk = riskSum / segments;
+
+    let score = 100 - (avgRisk * 12 + avgTime * 3 + hazardEdges * 8);
+    score = Math.max(35, Math.min(98, score));
+
+    const label = score >= 80 ? 'High' : score >= 60 ? 'Medium' : 'Low';
+    return { score: Math.round(score), label };
 }
 
 async function solveRouting() {
-    try {
-        const algorithm = document.getElementById('algorithmSelect').value;
+    if (selectedStart === null || selectedEnd === null) {
+        showToast('Please select both start and end nodes first.', 'warning');
+        return;
+    }
+    
+    if (blockedNodes.has(selectedStart) || blockedNodes.has(selectedEnd)) {
+        showToast('Start or end node is blocked. Please choose different nodes.', 'warning');
+        return;
+    }
 
-        // Use hard constraint endpoint if hard mode enabled
-        const endpoint = hardModeEnabled ? `${API_BASE}/solve/hard` : `${API_BASE}/solve`;
+    // Check route quality prediction if available
+    if (routeQualityData) {
+        if (routeQualityData.recommendation === 'REJECT') {
+            const confirmed = await showConfirm(
+                'AI Prediction: REJECT',
+                `${routeQualityData.reason}\n\nSuccess probability: ${routeQualityData.success_probability}%\n\nProceed anyway?`
+            );
+            if (!confirmed) {
+                return;
+            }
+        } else if (routeQualityData.recommendation === 'SLOW') {
+            // No prompt for slow predictions
+        } else if (routeQualityData.recommendation === 'CAUTION') {
+            console.warn(`AI Prediction Caution: ${routeQualityData.reason}`);
+        }
+    }
+
+    // Warn about high-risk nodes in path
+    if (hazardPredictions && hazardPredictions.high_risk_nodes.length > 0) {
+        const criticalNodes = Object.entries(hazardPredictions.predictions)
+            .filter(([_, pred]) => pred.risk_level === 'CRITICAL')
+            .map(([id, _]) => parseInt(id));
         
-        const requestBody = hardModeEnabled ? {
-            start: selectedStart,
-            end: selectedEnd,
-            algorithm: algorithm,
-            enable_constraints: true,
-            simulate_quantum_advantage: simulateQuantumAdv
-        } : {
-            start: selectedStart,
-            end: selectedEnd,
-            algorithm: algorithm,
-            avoid_hazards: false,
-            risk_weight: riskWeight,
-            hazard_weight: 0.0
-        };
+        if (criticalNodes.length > 0) {
+            console.warn(`⚠ WARNING: ${criticalNodes.length} nodes at CRITICAL hazard risk: ${criticalNodes.join(', ')}`);
+        }
+    }
 
-        const response = await fetch(endpoint, {
+    const algorithm = document.getElementById('algorithmSelect').value;
+    setSolveStatus('Computing route...');
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+
+    try {
+        // Update blocked nodes on backend first (always sync to clear old blocks)
+        await fetch(`${API_BASE}/graph/constraints`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                blocked_nodes: Array.from(blockedNodes),
+                blocked_edges: []
+            })
         });
 
-        if (!response.ok) {
-            alert('No path found between selected nodes');
-            return;
-        }
-
-        solvedPath = await response.json();
-        drawGraph();
-
-        document.getElementById('algoDisplay').textContent = solvedPath.algorithm.toUpperCase();
-        document.getElementById('timeDisplay').textContent = solvedPath.execution_time_ms;
-        document.getElementById('pathDisplay').textContent = solvedPath.path.join(' → ');
-        document.getElementById('costDisplay').textContent = solvedPath.cost.toFixed(2);
-        document.getElementById('optimalDisplay').textContent = solvedPath.is_optimal ? '✓ Optimal' : '⚠ Heuristic';
-        document.getElementById('quantumModeDisplay').textContent = solvedPath.quantum_mode || '—';
-        
-        // Show constraint info if hard mode
-        if (hardModeEnabled && solvedPath.is_valid !== undefined) {
-            const timingBreakdown = simulateQuantumAdv ? `
-                <div class="mt-3 p-2 bg-gradient-to-r from-purple-100 to-blue-100 border-2 border-purple-400 rounded text-sm">
-                    <div class="font-bold text-purple-900">⏱️ Timing Breakdown (with Simulation)</div>
-                    <div class="text-xs mt-2 space-y-1 text-purple-800">
-                        <div>Baseline Algorithm: ${solvedPath.theoretical_min_time_ms}ms</div>
-                        <div>Simulated Constraint Validation: ${solvedPath.constraint_validation_time_ms}ms</div>
-                        <div class="font-bold border-t pt-1">Total Classical: ${solvedPath.execution_time_ms}ms</div>
-                        <div class="text-blue-900 font-bold">Quantum (no overhead): ~24ms ⚡</div>
-                        <div class="text-green-700 font-bold">Quantum is ${(solvedPath.execution_time_ms / 24).toFixed(1)}x faster!</div>
-                    </div>
-                </div>
-            ` : '';
-
-            const constraintInfo = `
-                <div class="mt-4 p-3 ${solvedPath.is_valid ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400'} border-2 rounded">
-                    <div class="font-bold">${solvedPath.is_valid ? '✓ All Constraints Satisfied' : '⚠ Constraint Violations'}</div>
-                    <div class="text-sm mt-2">
-                        <div>Population Served: ${solvedPath.population_served} / ${solvedPath.population_served + solvedPath.population_left}</div>
-                        <div>Vehicles Used: ${solvedPath.vehicles_used} / 3</div>
-                        <div>Penalty: +${solvedPath.penalty.toFixed(0)}</div>
-                        <div class="font-bold">Adjusted Cost: ${solvedPath.adjusted_cost.toFixed(2)}</div>
-                    </div>
-                </div>
-                ${timingBreakdown}
-            `;
-            document.getElementById('results').innerHTML += constraintInfo;
-        }
-        
-        document.getElementById('results').style.display = 'block';
-        document.getElementById('comparison').style.display = 'none';
-    } catch (error) {
-        console.error('Error solving routing:', error);
-        alert('Error: Could not solve routing');
-    }
-}
-
-async function compareAlgorithms() {
-    try {
-        const response = await fetch(`${API_BASE}/solve/compare`, {
+        const response = await fetch(`${API_BASE}/solve`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -385,119 +553,226 @@ async function compareAlgorithms() {
             body: JSON.stringify({
                 start: selectedStart,
                 end: selectedEnd,
-                algorithm: 'dijkstra',
-                avoid_hazards: false,
-                risk_weight: riskWeight,
+                algorithm: algorithm,
+                avoid_hazards: hazardNodes.size > 0,
+                risk_weight: 0.5,
                 hazard_weight: 0.0
             })
         });
 
         if (!response.ok) {
-            alert('Comparison failed');
+            setSolveStatus('');
+            showToast('No path found between selected nodes.', 'error');
             return;
         }
 
-        const comparisonResults = await response.json();
-        displayComparison(comparisonResults.algorithms);
-        document.getElementById('results').style.display = 'none';
-        document.getElementById('comparison').style.display = 'block';
+        solvedPath = await response.json();
+        const realMs = solvedPath.execution_time_ms ?? 0;
+        const isClassical = CLASSICAL_ALGOS.has(algorithm);
+        const multiplier = Math.max(1000, ALGO_MULTIPLIERS[algorithm] || 1000);
+        const simulatedMs = isClassical
+            ? Math.max(1200, Math.round(realMs * multiplier))
+            : Math.max(400, Math.round(realMs));
+        const simulatedMinutes = (simulatedMs / 60000).toFixed(2);
+
+        if (isClassical) {
+            setSolveStatus(`Computing route... (simulated ${simulatedMinutes} min)`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, simulatedMs));
+        setSolveStatus('');
+        drawGraph();
     } catch (error) {
-        console.error('Error comparing algorithms:', error);
-        alert('Error: Could not compare algorithms');
+        setSolveStatus('');
+        console.error('Error solving routing:', error);
+        showToast('Could not solve routing.', 'error');
     }
 }
 
-function displayComparison(algorithms) {
-    const tableBody = document.getElementById('comparisonTable');
-    tableBody.innerHTML = '';
-
-    const algoOrder = ['dijkstra', 'dynamic_programming', 'astar', 'quantum', 'genetic'];
-    const algoNames = {
-        'dijkstra': 'Dijkstra',
-        'dynamic_programming': 'Dynamic Programming',
-        'astar': 'A* Heuristic',
-        'quantum': 'Quantum QAOA',
-        'genetic': 'Genetic Algorithm'
-    };
-
-    algoOrder.forEach(algoKey => {
-        const result = algorithms[algoKey];
-        if (!result) return;
-
-        const row = document.createElement('tr');
-        row.className = 'border-b border-gray-300 hover:bg-gray-100';
-
-        if (result.error) {
-            row.innerHTML = `
-                <td class="border border-green-300 p-3 font-semibold">${algoNames[algoKey]}</td>
-                <td colspan="4" class="border border-green-300 p-3 text-red-600">Error: ${result.error}</td>
-            `;
-        } else {
-            const modeText = result.mode ? ` (${result.mode})` : '';
-            row.innerHTML = `
-                <td class="border border-green-300 p-3 font-semibold">${algoNames[algoKey]}</td>
-                <td class="border border-green-300 p-3 text-right font-mono">${result.cost === Infinity ? '∞' : result.cost.toFixed(2)}</td>
-                <td class="border border-green-300 p-3 text-right font-mono">${result.execution_time_ms.toFixed(2)}</td>
-                <td class="border border-green-300 p-3 text-center">${result.is_optimal ? '✓' : '✗'}</td>
-                <td class="border border-green-300 p-3 text-sm">${modeText || '—'}</td>
-            `;
-        }
-
-        tableBody.appendChild(row);
-    });
-}
-
-async function toggleZoneBHazard() {
-    try {
-        // Zone B nodes: 6-13
-        const zoneBNodes = [6, 7, 8, 9, 10, 11, 12, 13];
-        const newHazardState = !Array.from(hazardNodes).some(n => zoneBNodes.includes(n));
-
-        const response = await fetch(`${API_BASE}/graph/hazards`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                node_ids: zoneBNodes,
-                edge_ids: [],
-                set_to: newHazardState
-            })
-        });
-
-        if (response.ok) {
-            if (newHazardState) {
-                zoneBNodes.forEach(n => hazardNodes.add(n));
-                document.getElementById('hazardZoneB').classList.remove('bg-red-500', 'hover:bg-red-600');
-                document.getElementById('hazardZoneB').classList.add('bg-green-500', 'hover:bg-green-600');
-                document.getElementById('hazardZoneB').textContent = 'Zone B Hazard: ON';
-            } else {
-                zoneBNodes.forEach(n => hazardNodes.delete(n));
-                document.getElementById('hazardZoneB').classList.remove('bg-green-500', 'hover:bg-green-600');
-                document.getElementById('hazardZoneB').classList.add('bg-red-500', 'hover:bg-red-600');
-                document.getElementById('hazardZoneB').textContent = 'Toggle Zone B as Hazard';
-            }
-            graphData = await response.json();
-            drawGraph();
-        }
-    } catch (error) {
-        console.error('Error updating hazards:', error);
-    }
-}
-
-function resetVisualization() {
-    selectedStart = 0;
-    selectedEnd = 23;
+async function resetVisualization() {
+    // Hide loading indicator immediately
+    setSolveStatus('');
+    
+    selectedStart = null;
+    selectedEnd = null;
     solvedPath = null;
+    const hazardsToClear = graphData
+        ? graphData.nodes.filter(n => n.hazard).map(n => n.id)
+        : Array.from(hazardNodes);
     hazardNodes.clear();
-    document.getElementById('startNode').value = 0;
-    document.getElementById('endNode').value = 23;
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('comparison').style.display = 'none';
-    document.getElementById('hazardZoneB').classList.remove('bg-green-500', 'hover:bg-green-600');
-    document.getElementById('hazardZoneB').classList.add('bg-red-500', 'hover:bg-red-600');
-    document.getElementById('hazardZoneB').textContent = 'Toggle Zone B as Hazard';
+    blockedNodes.clear();
+    trafficData = null;
+    hazardPredictions = null;
+    routeQualityData = null;
+    document.getElementById('predictions').style.display = 'none';
+    if (hazardsToClear.length > 0) {
+        try {
+            await fetch(`${API_BASE}/graph/hazards`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    node_ids: hazardsToClear,
+                    edge_ids: [],
+                    set_to: false
+                })
+            });
+        } catch (error) {
+            console.error('Error clearing hazards:', error);
+        }
+    }
+    updateBlockedNodesList();
     drawGraph();
+}
+
+async function fetchPredictions() {
+    if (!selectedStart && selectedStart !== 0) {
+        showToast('Please select start node first.', 'warning');
+        return;
+    }
+    
+    if (!selectedEnd && selectedEnd !== 0) {
+        showToast('Please select end node first.', 'warning');
+        return;
+    }
+
+    try {
+        const algorithm = document.getElementById('algorithmSelect').value;
+        const hazardList = Array.from(hazardNodes).join(',');
+        const blockedList = Array.from(blockedNodes).join(',');
+
+        // Fetch all predictions in parallel
+        const [trafficResp, hazardResp, qualityResp] = await Promise.all([
+            fetch(`${API_BASE}/predict/traffic?hazard_nodes=${hazardList}&blocked_nodes=${blockedList}`),
+            fetch(`${API_BASE}/predict/hazards?node_ids=${hazardList}&blocked_nodes=${blockedList}`),
+            fetch(`${API_BASE}/predict/route-quality?start=${selectedStart}&end=${selectedEnd}&algorithm=${algorithm}&hazard_nodes=${hazardList}&blocked_nodes=${blockedList}`)
+        ]);
+
+        // Check for response errors
+        if (!trafficResp.ok || !hazardResp.ok || !qualityResp.ok) {
+            const trafficError = !trafficResp.ok ? await trafficResp.text() : '';
+            const hazardError = !hazardResp.ok ? await hazardResp.text() : '';
+            const qualityError = !qualityResp.ok ? await qualityResp.text() : '';
+            
+            console.error('Prediction errors:', {trafficError, hazardError, qualityError});
+            showToast('Could not fetch predictions. Please try again.', 'error');
+            return;
+        }
+
+        trafficData = await trafficResp.json();
+        hazardPredictions = await hazardResp.json();
+        routeQualityData = await qualityResp.json();
+
+        // Check if any response is an error object
+        if (trafficData.detail || hazardPredictions.detail || routeQualityData.detail) {
+            console.error('API errors:', {trafficData, hazardPredictions, routeQualityData});
+            showToast('Prediction service encountered an error. Check console for details.', 'error');
+            return;
+        }
+
+        displayPredictions();
+        drawGraph(); // Redraw with prediction overlays
+    } catch (error) {
+        console.error('Error fetching predictions:', error);
+        showToast(`Could not fetch predictions - ${error.message}`, 'error');
+    }
+}
+
+function displayPredictions() {
+    // Check if we have valid prediction data
+    if (!trafficData || !hazardPredictions || !routeQualityData) {
+        console.error('Invalid prediction data:', {trafficData, hazardPredictions, routeQualityData});
+        showToast('Incomplete prediction data received.', 'error');
+        return;
+    }
+
+    // Show predictions panel
+    document.getElementById('predictions').style.display = 'block';
+
+    // Route Quality
+    const recommendation = routeQualityData.recommendation || 'UNKNOWN';
+    const recBadge = document.getElementById('routeRecommendation');
+    
+    const badgeStyles = {
+        'PROCEED': 'bg-green-100 text-green-800',
+        'CAUTION': 'bg-yellow-100 text-yellow-800',
+        'SLOW': 'bg-orange-100 text-orange-800',
+        'REJECT': 'bg-red-100 text-red-800'
+    };
+    
+    recBadge.textContent = recommendation;
+    recBadge.className = `px-2 py-1 rounded text-xs font-bold ${badgeStyles[recommendation] || 'bg-gray-100 text-gray-800'}`;
+    
+    document.getElementById('successProb').textContent = `${routeQualityData.success_probability || 0}%`;
+    document.getElementById('estTime').textContent = `${Math.round(routeQualityData.estimated_time || 0)} ms`;
+    document.getElementById('complexity').textContent = `${Math.round(routeQualityData.complexity_score || 0)}%`;
+    document.getElementById('estCost').textContent = (routeQualityData.estimated_cost || 0).toFixed(1);
+    document.getElementById('routeReason').textContent = routeQualityData.reason || 'No prediction available';
+
+    // Traffic Status
+    document.getElementById('peakHourBadge').style.display = trafficData.peak_hour ? 'inline-block' : 'none';
+    
+    const highTrafficNodes = trafficData.nodes ? Object.entries(trafficData.nodes).filter(([_, traffic]) => traffic > 60).length : 0;
+    document.getElementById('highTrafficCount').textContent = `${highTrafficNodes} zones`;
+
+    // Hazard Predictions
+    document.getElementById('nightTimeBadge').style.display = hazardPredictions.night_time ? 'inline-block' : 'none';
+    
+    const highRiskNodes = hazardPredictions.high_risk_nodes;
+    document.getElementById('highRiskCount').textContent = `${highRiskNodes.length} nodes`;
+    
+    if (highRiskNodes.length > 0) {
+        const criticalNodes = Object.entries(hazardPredictions.predictions)
+            .filter(([_, pred]) => pred.risk_level === 'CRITICAL')
+            .map(([id, _]) => id);
+        
+        if (criticalNodes.length > 0) {
+            document.getElementById('highRiskList').textContent = `⚠ CRITICAL: Nodes ${criticalNodes.join(', ')}`;
+        } else {
+            document.getElementById('highRiskList').textContent = `High risk nodes: ${highRiskNodes.join(', ')}`;
+        }
+    } else {
+        document.getElementById('highRiskList').textContent = 'All nodes at acceptable risk levels';
+    }
+}
+
+function displayConstraints(constraintsData) {
+    const config = constraintsData.config;
+    const zones = constraintsData.zones;
+    
+    // Display config summary with just the values
+    document.getElementById('vehicleCapacity').textContent = config.vehicle_capacity + ' units';
+    document.getElementById('numVehicles').textContent = config.num_vehicles;
+    document.getElementById('totalPopulation').textContent = config.total_population + ' people';
+    document.getElementById('timeLimit').textContent = config.time_limit + ' min';
+    
+    // Display zones in a grid layout
+    const zonesList = document.getElementById('zonesList');
+    zonesList.innerHTML = '';
+    
+    Object.entries(zones).forEach(([zoneKey, zoneInfo]) => {
+        const zoneEl = document.createElement('div');
+        zoneEl.className = 'bg-gradient-to-br from-white to-gray-50 rounded-xl p-4 border-2 shadow-sm hover:shadow-md transition-shadow';
+        zoneEl.style.borderColor = zoneInfo.color;
+        
+        const timeWindow = zoneInfo.time_window;
+        const zoneHtml = `
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full" style="background-color: ${zoneInfo.color};"></div>
+                    <strong class="font-bold text-lg" style="color: ${zoneInfo.color};">${zoneInfo.name}</strong>
+                </div>
+                <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">${zoneKey}</span>
+            </div>
+            <p class="text-gray-700 text-sm mb-3">${zoneInfo.description}</p>
+            <div class="bg-gray-100 rounded-lg px-3 py-2 flex items-center justify-between">
+                <span class="text-xs text-gray-600 font-semibold">Time Window</span>
+                <span class="text-sm font-bold" style="color: ${zoneInfo.color};">${timeWindow.min}-${timeWindow.max} min</span>
+            </div>
+        `;
+        
+        zoneEl.innerHTML = zoneHtml;
+        zonesList.appendChild(zoneEl);
+    });
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);

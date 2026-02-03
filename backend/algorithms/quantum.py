@@ -19,7 +19,7 @@ class QuantumSolver:
         except ImportError:
             return False
 
-    def solve(self, start: int, end: int, graph_data: Dict) -> Tuple[List[int], float]:
+    def solve(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
         """
         Solve shortest path using quantum approach.
         
@@ -27,17 +27,17 @@ class QuantumSolver:
         """
         if not self.qaoa_implemented:
             # Fall back to simulated quantum annealing
-            path, cost = self._quantum_annealing_simulation(start, end, graph_data)
+            path, cost = self._quantum_annealing_simulation(start, end, graph_data, avoid_hazards)
             self.execution_mode = "Quantum Annealing Simulation (Qiskit unavailable)"
             return path, cost
 
         # Try QAOA first
-        path, cost = self._qaoa_solver(start, end, graph_data)
+        path, cost = self._qaoa_solver(start, end, graph_data, avoid_hazards)
         self.execution_mode = "QAOA"
         
         if cost == float("inf"):
             # QAOA failed, fall back to simulation
-            path, cost = self._quantum_annealing_simulation(start, end, graph_data)
+            path, cost = self._quantum_annealing_simulation(start, end, graph_data, avoid_hazards)
             self.execution_mode = "Quantum Annealing Simulation (QAOA fallback)"
         
         return path, cost
@@ -46,7 +46,7 @@ class QuantumSolver:
         """Return which quantum execution mode was used."""
         return self.execution_mode
 
-    def _quantum_annealing_simulation(self, start: int, end: int, graph_data: Dict) -> Tuple[List[int], float]:
+    def _quantum_annealing_simulation(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
         nodes = {node["id"]: node for node in graph_data["nodes"]}
         edges = graph_data["edges"]
 
@@ -54,6 +54,14 @@ class QuantumSolver:
         for edge in edges:
             if edge.get("blocked"):
                 continue
+            
+            from_node = nodes.get(edge["from"])
+            to_node = nodes.get(edge["to"])
+            
+            # Skip hazardous paths if requested
+            if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
+                continue
+            
             adjacency[edge["from"]].append((edge["to"], edge["cost"]))
 
         def path_cost(path):
@@ -144,7 +152,7 @@ class QuantumSolver:
 
         return new_path
 
-    def _qaoa_solver(self, start: int, end: int, graph_data: Dict) -> Tuple[List[int], float]:
+    def _qaoa_solver(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
         """
         Implement QAOA for shortest path problem.
         Uses Ising Hamiltonian encoding where edge weights are encoded in Ising coupling.
@@ -175,9 +183,20 @@ class QuantumSolver:
         for i in range(num_qubits):
             cost_matrix[i][i] = 0.0
 
+        nodes_dict = {node["id"]: node for node in graph_data["nodes"]}
         for edge in graph_data["edges"]:
+            if edge.get("blocked"):
+                continue
+            
             from_id = edge["from"]
             to_id = edge["to"]
+            from_node = nodes_dict.get(from_id)
+            to_node = nodes_dict.get(to_id)
+            
+            # Skip hazardous paths if requested
+            if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
+                continue
+            
             if from_id in node_to_qubit and to_id in node_to_qubit:
                 from_qubit = node_to_qubit[from_id]
                 to_qubit = node_to_qubit[to_id]
@@ -244,13 +263,18 @@ class QuantumSolver:
         selected_nodes = [qubit_to_node[i] for i, bit in enumerate(best_bitstring) if bit == "1"]
         
         # Build path by BFS from start to end using selected nodes
-        path = self._bfs_path_with_node_set(start, end, graph_data, set(selected_nodes))
+        path = self._bfs_path_with_node_set(start, end, graph_data, set(selected_nodes), avoid_hazards)
         
         if not path:
             # Fallback: use BFS on all nodes
             adjacency = {node["id"]: [] for node in graph_data["nodes"]}
+            nodes_dict = {node["id"]: node for node in graph_data["nodes"]}
             for edge in graph_data["edges"]:
                 if edge.get("blocked"):
+                    continue
+                from_node = nodes_dict.get(edge["from"])
+                to_node = nodes_dict.get(edge["to"])
+                if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
                     continue
                 adjacency[edge["from"]].append((edge["to"], edge["cost"]))
             path = self._bfs_path(start, end, adjacency)
@@ -260,8 +284,13 @@ class QuantumSolver:
 
         # Calculate cost
         adjacency = {node["id"]: [] for node in graph_data["nodes"]}
+        nodes_dict = {node["id"]: node for node in graph_data["nodes"]}
         for edge in graph_data["edges"]:
             if edge.get("blocked"):
+                continue
+            from_node = nodes_dict.get(edge["from"])
+            to_node = nodes_dict.get(edge["to"])
+            if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
                 continue
             adjacency[edge["from"]].append((edge["to"], edge["cost"]))
 
@@ -282,12 +311,17 @@ class QuantumSolver:
         return path, cost
 
     def _bfs_path_with_node_set(
-        self, start_id: int, end_id: int, graph_data: Dict, selected_nodes: set
+        self, start_id: int, end_id: int, graph_data: Dict, selected_nodes: set, avoid_hazards: bool = False
     ) -> List[int] | None:
         """BFS but prioritize paths through selected_nodes."""
         adjacency = {}
+        nodes_dict = {node["id"]: node for node in graph_data["nodes"]}
         for edge in graph_data["edges"]:
             if edge.get("blocked"):
+                continue
+            from_node = nodes_dict.get(edge["from"])
+            to_node = nodes_dict.get(edge["to"])
+            if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
                 continue
             from_id = edge["from"]
             to_id = edge["to"]

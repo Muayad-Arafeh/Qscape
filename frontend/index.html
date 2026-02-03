@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qscape - Quantum Routing</title>
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    />
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gradient-to-br from-purple-600 to-purple-900 min-h-screen">
@@ -19,7 +25,7 @@
             <!-- Graph Visualization -->
             <div class="lg:col-span-3">
                 <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-4 h-[calc(100vh-450px)] min-h-[600px] flex items-center justify-center">
-                    <canvas id="graphCanvas" class="rounded-lg w-full h-full cursor-crosshair"></canvas>
+                    <div id="graphMap" class="rounded-lg w-full h-full"></div>
                 </div>
             </div>
 
@@ -27,15 +33,31 @@
             <div class="bg-gray-50 rounded-lg border-2 border-gray-200 p-6 space-y-4 h-fit">
                 <h2 class="text-xl font-bold text-gray-800">Routing Control</h2>
 
-                <!-- Route Selection -->
-                <div class="space-y-4">
-                    <div>
-                        <label class="block font-semibold text-gray-700 mb-2">Start Node:</label>
-                        <input type="number" id="startNode" min="0" max="23" value="0" class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                <!-- Map Edit Mode -->
+                <div>
+                    <label class="block font-semibold text-gray-700 mb-2">Map Edit Mode:</label>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button id="modeStart" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg transition">
+                            Select Start Node
+                        </button>
+                        <button id="modeEnd" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg transition">
+                            Select End Node
+                        </button>
+                        <button id="modeHazard" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-3 rounded-lg transition">
+                            Toggle Hazard Node
+                        </button>
+                        <button id="modeBlocked" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-semibold py-2 px-3 rounded-lg transition">
+                            Toggle Blocked Node
+                        </button>
                     </div>
-                    <div>
-                        <label class="block font-semibold text-gray-700 mb-2">End Node:</label>
-                        <input type="number" id="endNode" min="0" max="23" value="23" class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                    <p class="text-xs text-gray-600 mt-2">Click a node on the map to apply the selected action.</p>
+                    
+                    <!-- Blocked Nodes Display -->
+                    <div class="mt-3 p-2 bg-gray-100 rounded border border-gray-300">
+                        <p class="text-xs font-semibold text-gray-700 mb-1">Blocked Nodes:</p>
+                        <div id="blockedNodesList" class="text-sm text-gray-800 font-mono">
+                            <span class="text-gray-500 italic">None selected</span>
+                        </div>
                     </div>
                 </div>
 
@@ -53,113 +75,166 @@
 
                 <!-- Buttons -->
                 <div class="space-y-2 pt-4">
+                    <button id="predictBtn" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 active:scale-100">
+                        🤖 Get AI Predictions
+                    </button>
                     <button id="solveBtn" class="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 active:scale-100">
                         Find Path
-                    </button>
-                    <button id="compareBtn" class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 active:scale-100">
-                        Compare All
                     </button>
                     <button id="resetBtn" class="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-4 rounded-lg transition">
                         Reset
                     </button>
+                    <div id="solveStatus" class="hidden text-sm text-purple-700 font-semibold text-center mt-2 animate-pulse"></div>
+                </div>
+
+                <!-- AI Predictions Panel -->
+                <div id="predictions" style="display:none;" class="border-t-2 border-blue-300 pt-4 mt-4">
+                    <h3 class="text-lg font-bold text-blue-900 mb-3">🤖 AI Predictions</h3>
+                    
+                    <!-- Route Quality -->
+                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 mb-3 border border-blue-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <strong class="text-gray-800">Route Quality:</strong>
+                            <span id="routeRecommendation" class="px-2 py-1 rounded text-xs font-bold"></span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                                <span class="text-gray-600">Success:</span>
+                                <span id="successProb" class="font-bold text-blue-600 ml-1"></span>
+                            </div>
+                            <div>
+                                <span class="text-gray-600">Est. Time:</span>
+                                <span id="estTime" class="font-bold text-blue-600 ml-1"></span>
+                            </div>
+                            <div>
+                                <span class="text-gray-600">Complexity:</span>
+                                <span id="complexity" class="font-bold text-blue-600 ml-1"></span>
+                            </div>
+                            <div>
+                                <span class="text-gray-600">Est. Cost:</span>
+                                <span id="estCost" class="font-bold text-blue-600 ml-1"></span>
+                            </div>
+                        </div>
+                        <p id="routeReason" class="text-xs text-gray-600 mt-2 italic"></p>
+                    </div>
+
+                    <!-- Traffic Prediction -->
+                    <div class="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-3 mb-3 border border-yellow-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <strong class="text-gray-800">Traffic Status:</strong>
+                            <span id="peakHourBadge" class="px-2 py-1 rounded text-xs font-bold bg-orange-100 text-orange-700" style="display:none;">⚠ Peak Hour</span>
+                        </div>
+                        <div class="text-sm">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-600">High Congestion Zones:</span>
+                                <span id="highTrafficCount" class="font-bold text-orange-600"></span>
+                            </div>
+                            <div class="text-xs text-gray-500 italic">
+                                Traffic overlay shown on map (red = high, yellow = moderate, green = low)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hazard Prediction -->
+                    <div class="bg-gradient-to-r from-red-50 to-pink-50 rounded-lg p-3 border border-red-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <strong class="text-gray-800">Hazard Risk:</strong>
+                            <span id="nightTimeBadge" class="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700" style="display:none;">🌙 Night Risk</span>
+                        </div>
+                        <div class="text-sm">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-600">High Risk Nodes:</span>
+                                <span id="highRiskCount" class="font-bold text-red-600"></span>
+                            </div>
+                            <div id="highRiskList" class="text-xs text-gray-500 mt-1"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Constraint Controls -->
-        <div class="border-t-2 border-gray-200 px-8 py-6 bg-gradient-to-r from-green-50 to-emerald-50">
-            <div class="mb-6">
-                <h3 class="text-xl font-bold text-gray-800 mb-2">⚡ Constrained Evacuation Routing</h3>
-                <p class="text-sm text-gray-600">All routes must satisfy multi-vehicle capacity, time window, and safety constraints</p>
-            </div>
-            
-            <!-- Constraint Info -->
-            <div class="grid grid-cols-3 gap-3 mb-6">
-                <div class="bg-white p-3 rounded border-l-4 border-purple-500">
-                    <div class="text-xs font-semibold text-gray-600">Vehicle Capacity</div>
-                    <div class="text-lg font-bold text-purple-600">50 👥</div>
+        <!-- Constraints Info Section (Below Graph) -->
+        <div class="px-6 pb-6">
+            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-r from-purple-500 to-indigo-500 px-6 py-4">
+                    <h3 class="text-2xl font-bold text-white flex items-center gap-2">
+                        <span>⚙️</span>
+                        <span>Evacuation Constraints & Zone Information</span>
+                    </h3>
+                    <p class="text-purple-100 text-sm mt-1">System configuration and operational parameters</p>
                 </div>
-                <div class="bg-white p-3 rounded border-l-4 border-blue-500">
-                    <div class="text-xs font-semibold text-gray-600">Available Teams</div>
-                    <div class="text-lg font-bold text-blue-600">3 🚑</div>
-                </div>
-                <div class="bg-white p-3 rounded border-l-4 border-orange-500">
-                    <div class="text-xs font-semibold text-gray-600">Time Limit</div>
-                    <div class="text-lg font-bold text-orange-600">30 min ⏱️</div>
-                </div>
-            </div>
+                
+                <div class="p-6">
+                    <!-- Config Summary Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border-l-4 border-purple-500">
+                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Vehicle Capacity</div>
+                            <div id="vehicleCapacity" class="text-2xl font-bold text-purple-700"></div>
+                        </div>
+                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border-l-4 border-blue-500">
+                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Available Vehicles</div>
+                            <div id="numVehicles" class="text-2xl font-bold text-blue-700"></div>
+                        </div>
+                        <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border-l-4 border-indigo-500">
+                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Total Population</div>
+                            <div id="totalPopulation" class="text-2xl font-bold text-indigo-700"></div>
+                        </div>
+                        <div class="bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-4 border-l-4 border-pink-500">
+                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Time Limit</div>
+                            <div id="timeLimit" class="text-2xl font-bold text-pink-700"></div>
+                        </div>
+                    </div>
 
-            <div class="p-3 bg-green-100 rounded border-l-4 border-green-500 text-sm mb-6">
-                <strong class="text-green-900">💡 Why Quantum Excels:</strong>
-                <p class="text-green-800 text-xs mt-1">Classical algorithms check exponentially many constraint combinations. Quantum explores them all in superposition!</p>
-            </div>
-            
-            <!-- Simulation Toggle -->
-            <div class="p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
-                <label class="flex items-center cursor-pointer mb-2">
-                    <input type="checkbox" id="simulateQuantumAdv" class="mr-3 w-4 h-4">
-                    <span class="font-semibold text-blue-900">🎬 Show Constraint Validation Overhead</span>
-                </label>
-                <p class="text-xs text-blue-700 ml-7">Demonstrates the exponential constraint-checking time classical algorithms would need on larger evacuation networks</p>
-            </div>
-        </div>
-
-        <!-- Solution Results -->
-        <div id="results" style="display:none;" class="border-t-2 border-gray-200 px-8 py-6 bg-blue-50">
-            <h3 class="text-xl font-bold text-blue-900 mb-4">Solution</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div class="bg-white rounded-lg border-l-4 border-purple-500 p-4">
-                    <strong class="text-gray-700">Algorithm:</strong>
-                    <span id="algoDisplay" class="block text-purple-600 font-bold mt-2"></span>
+                    <!-- Zones -->
+                    <div>
+                        <h4 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                            <span class="text-purple-600">📍</span>
+                            <span>Evacuation Zones & Time Windows</span>
+                        </h4>
+                        <div id="zonesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+                    </div>
                 </div>
-                <div class="bg-white rounded-lg border-l-4 border-blue-500 p-4">
-                    <strong class="text-gray-700">Execution Time:</strong>
-                    <span id="timeDisplay" class="block text-blue-600 font-bold mt-2"></span> ms
-                </div>
-                <div class="bg-white rounded-lg border-l-4 border-green-500 p-4">
-                    <strong class="text-gray-700">Total Cost:</strong>
-                    <span id="costDisplay" class="block text-green-600 font-bold mt-2"></span>
-                </div>
-                <div class="bg-white rounded-lg border-l-4 border-orange-500 p-4">
-                    <strong class="text-gray-700">Optimality:</strong>
-                    <span id="optimalDisplay" class="block text-orange-600 font-bold mt-2"></span>
-                </div>
-                <div class="bg-white rounded-lg border-l-4 border-indigo-500 p-4">
-                    <strong class="text-gray-700">Quantum Mode:</strong>
-                    <span id="quantumModeDisplay" class="block text-indigo-600 font-bold text-sm mt-2"></span>
-                </div>
-            </div>
-            <div class="mt-4 p-4 bg-white rounded-lg border border-gray-300">
-                <strong class="text-gray-700">Path:</strong>
-                <span id="pathDisplay" class="block text-gray-600 mt-2 font-mono text-sm"></span>
-            </div>
-        </div>
-
-        <!-- Comparison Results -->
-        <div id="comparison" style="display:none;" class="border-t-2 border-gray-200 px-8 py-6 bg-green-50">
-            <h3 class="text-xl font-bold text-green-900 mb-4">Algorithm Comparison</h3>
-            <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-sm">
-                    <thead>
-                        <tr class="bg-green-100 border-b-2 border-green-300">
-                            <th class="border border-green-300 p-3 text-left font-bold">Algorithm</th>
-                            <th class="border border-green-300 p-3 text-right font-bold">Cost</th>
-                            <th class="border border-green-300 p-3 text-right font-bold">Time (ms)</th>
-                            <th class="border border-green-300 p-3 text-center font-bold">Optimal</th>
-                            <th class="border border-green-300 p-3 text-left font-bold">Mode/Notes</th>
-                        </tr>
-                    </thead>
-                    <tbody id="comparisonTable"></tbody>
-                </table>
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="bg-gray-100 text-gray-600 p-6 text-center border-t border-gray-300 text-sm">
-            Click on nodes to select start/end • Toggle simulation to see constraint validation overhead • Compare algorithms
+            Click on nodes to select start/end • Use edit mode buttons to set hazards • Choose algorithm and find optimal path
         </footer>
     </div>
 
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="hidden fixed bottom-4 left-4 z-50">
+        <div class="bg-white/95 rounded-lg px-4 py-2 shadow-lg flex items-center gap-3 border border-purple-200">
+            <div class="h-4 w-4 rounded-full border-2 border-purple-600 border-t-transparent animate-spin"></div>
+            <div id="loadingText" class="text-purple-700 font-semibold">Computing route...</div>
+        </div>
+    </div>
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
     <script src="app.js"></script>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmOverlay" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-5 py-4 border-b">
+                <h4 id="confirmTitle" class="text-lg font-bold text-gray-800">Confirm</h4>
+            </div>
+            <div class="px-5 py-4">
+                <p id="confirmMessage" class="text-sm text-gray-700 whitespace-pre-line"></p>
+            </div>
+            <div class="px-5 py-4 border-t flex justify-end gap-2">
+                <button id="confirmCancel" class="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+                <button id="confirmOk" class="px-4 py-2 text-white bg-purple-600 rounded hover:bg-purple-700">OK</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

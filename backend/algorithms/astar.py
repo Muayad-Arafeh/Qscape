@@ -19,6 +19,9 @@ def astar(
     nodes = {node["id"]: node for node in graph_data["nodes"]}
     edges = graph_data["edges"]
 
+    if nodes.get(start, {}).get("blocked") or nodes.get(end, {}).get("blocked"):
+        return [start, end], float("inf")
+
     # Precompute node coordinates for heuristic
     node_coords = {node["id"]: (node["x"], node["y"]) for node in graph_data["nodes"]}
 
@@ -38,6 +41,9 @@ def astar(
         to_id = edge["to"]
         from_node = nodes.get(from_id)
         to_node = nodes.get(to_id)
+
+        if from_node.get("blocked") or to_node.get("blocked"):
+            continue
 
         # Skip hazardous paths if requested
         if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):

@@ -19,6 +19,9 @@ def build_adjacency(
         from_node = nodes.get(from_id)
         to_node = nodes.get(to_id)
 
+        if from_node.get("blocked") or to_node.get("blocked"):
+            continue
+
         if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
             continue
 
@@ -41,6 +44,9 @@ def dijkstra(
     hazard_weight: float = 0.0,
 ) -> tuple:
     nodes = {node["id"]: node for node in graph_data["nodes"]}
+
+    if nodes.get(start, {}).get("blocked") or nodes.get(end, {}).get("blocked"):
+        return [start, end], float("inf")
     adjacency = build_adjacency(
         graph_data,
         avoid_hazards,

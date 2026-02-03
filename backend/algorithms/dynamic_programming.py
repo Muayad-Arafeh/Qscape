@@ -17,6 +17,9 @@ def dynamic_programming(
     nodes = {node["id"]: node for node in graph_data["nodes"]}
     edges = graph_data["edges"]
 
+    if nodes.get(start, {}).get("blocked") or nodes.get(end, {}).get("blocked"):
+        return [start, end], float("inf")
+
     # Initialize distances and parents
     distances = {node_id: float("inf") for node_id in nodes}
     distances[start] = 0.0
@@ -32,6 +35,9 @@ def dynamic_programming(
         to_id = edge["to"]
         from_node = nodes.get(from_id)
         to_node = nodes.get(to_id)
+
+        if from_node.get("blocked") or to_node.get("blocked"):
+            continue
 
         # Skip hazardous paths if requested
         if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):

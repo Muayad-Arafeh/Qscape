@@ -7,14 +7,28 @@ class GeneticAlgorithmSolver:
         self.population_size = population_size
         self.generations = generations
 
-    def solve(self, start: int, end: int, graph_data: Dict) -> Tuple[List[int], float]:
+    def solve(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
         nodes = {node["id"]: node for node in graph_data["nodes"]}
         edges = graph_data["edges"]
+
+        if nodes.get(start, {}).get("blocked") or nodes.get(end, {}).get("blocked"):
+            return [start, end], float("inf")
 
         adjacency = {node_id: [] for node_id in nodes}
         for edge in edges:
             if edge.get("blocked"):
                 continue
+            
+            from_node = nodes.get(edge["from"])
+            to_node = nodes.get(edge["to"])
+
+            if from_node.get("blocked") or to_node.get("blocked"):
+                continue
+            
+            # Skip hazardous paths if requested
+            if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
+                continue
+            
             adjacency[edge["from"]].append((edge["to"], edge["cost"]))
 
         def path_cost(path):

@@ -15,6 +15,11 @@ class NodeModel(BaseModel):
     y: float
     zone: str
     hazard: bool = False
+    population: Optional[int] = None
+    capacity: Optional[int] = None
+    label: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 class EdgeModel(BaseModel):
@@ -26,6 +31,7 @@ class EdgeModel(BaseModel):
     risk: float = 0.0
     hazard: bool = False
     blocked: bool = False
+    capacity: Optional[int] = None
 
 
 class GraphModel(BaseModel):
@@ -55,13 +61,6 @@ class PathResponse(BaseModel):
     quantum_mode: Optional[str] = None  # "QAOA", "Quantum Annealing Simulation", etc.
 
 
-class GraphUpdate(BaseModel):
-    nodes: Optional[List[NodeModel]] = None
-    edges: Optional[List[EdgeModel]] = None
-    start: Optional[int] = None
-    end: Optional[int] = None
-
-
 class HazardUpdate(BaseModel):
     node_ids: List[int] = []
     edge_ids: List[EdgeRef] = []
@@ -73,42 +72,29 @@ class ConstraintsUpdate(BaseModel):
     blocked_edges: List[EdgeRef] = []
 
 
-class ConstrainedRoutingRequest(BaseModel):
-    """Request for constrained evacuation routing (hard mode)"""
-    start: int
-    end: int
-    algorithm: str = "quantum"  # Default to quantum for constrained problems
-    enable_constraints: bool = True
-    vehicle_capacity: Optional[int] = None  # Override default
-    num_vehicles: Optional[int] = None  # Override default
-    time_limit: Optional[int] = None  # Override default
-    simulate_quantum_advantage: bool = False  # Simulate constraint validation overhead for classical
+class TrafficPrediction(BaseModel):
+    """Traffic/congestion predictions for nodes and edges"""
+    nodes: dict  # {node_id: traffic_percentage}
+    edges: dict  # {edge_key: traffic_percentage}
+    peak_hour: bool
+    prediction_time: str
 
 
-class ConstraintViolation(BaseModel):
-    """Details about a constraint violation"""
-    type: str  # "capacity", "time_window", "total_time"
-    details: dict
+class HazardPrediction(BaseModel):
+    """Hazard probability predictions"""
+    predictions: dict  # {node_id: {probability: float, risk_level: str}}
+    high_risk_nodes: List[int]
+    night_time: bool
+    prediction_time: str
 
 
-class ConstrainedPathResponse(BaseModel):
-    """Response for constrained routing including violation info"""
-    path: List[int]
-    cost: float
-    nodes: List[NodeModel]
-    edges: List[EdgeModel]
-    algorithm: str
-    execution_time_ms: float
-    is_optimal: bool
-    quantum_mode: Optional[str] = None
-    
-    # Constraint-specific fields
-    is_valid: bool  # Does solution satisfy all constraints?
-    violations: List[ConstraintViolation] = []
-    penalty: float = 0.0  # Penalty for violations
-    adjusted_cost: float = 0.0  # Cost + penalty
-    population_served: int = 0
-    population_left: int = 0
-    vehicles_used: int = 1
-    constraint_validation_time_ms: float = 0.0  # Simulated constraint checking time
-    theoretical_min_time_ms: float = 0.0  # Minimum possible without constraints
+class RouteQualityPrediction(BaseModel):
+    """Route quality prediction before computation"""
+    success_probability: float
+    estimated_time: float
+    estimated_cost: float
+    complexity_score: float
+    recommendation: str  # "PROCEED", "CAUTION", "REJECT", "SLOW"
+    reason: str
+    obstacle_density: float
+    prediction_time: str
