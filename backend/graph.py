@@ -1,154 +1,263 @@
 def get_graph():
+    # SIMPLIFIED GRAPH - Node by node, easy to modify
+    # No clustering, no complex functions!
+    
     nodes = [
-        # Zone A - Safe Entry (population: people at each node, capacity: max throughput)
-        {"id": 0, "x": 100, "y": 50,  "zone": "A", "hazard": False, "population": 15, "capacity": 50, "label": "A0-Entry"},
-        {"id": 1, "x": 60,  "y": 100, "zone": "A", "hazard": False, "population": 8,  "capacity": 30, "label": "A1"},
-        {"id": 2, "x": 140, "y": 100, "zone": "A", "hazard": False, "population": 12, "capacity": 35, "label": "A2"},
-        {"id": 3, "x": 100, "y": 150, "zone": "A", "hazard": False, "population": 10, "capacity": 40, "label": "A3"},
-        {"id": 4, "x": 160, "y": 150, "zone": "A", "hazard": False, "population": 7,  "capacity": 25, "label": "A4"},
-        {"id": 5, "x": 120, "y": 200, "zone": "A", "hazard": False, "population": 9,  "capacity": 30, "label": "A5"},
-
-        # Zone B - Danger Zone (high population, high risk, limited capacity)
-        {"id": 6,  "x": 120, "y": 260, "zone": "B", "hazard": False, "population": 25, "capacity": 20, "label": "B6"},
-        {"id": 7,  "x": 80,  "y": 310, "zone": "B", "hazard": False, "population": 18, "capacity": 15, "label": "B7"},
-        {"id": 8,  "x": 160, "y": 310, "zone": "B", "hazard": False, "population": 20, "capacity": 18, "label": "B8"},
-        {"id": 9,  "x": 120, "y": 360, "zone": "B", "hazard": False, "population": 22, "capacity": 16, "label": "B9"},
-        {"id": 10, "x": 60,  "y": 360, "zone": "B", "hazard": False, "population": 16, "capacity": 12, "label": "B10"},
-        {"id": 11, "x": 180, "y": 360, "zone": "B", "hazard": False, "population": 19, "capacity": 14, "label": "B11"},
-        {"id": 12, "x": 120, "y": 410, "zone": "B", "hazard": False, "population": 23, "capacity": 17, "label": "B12"},
-        {"id": 13, "x": 120, "y": 460, "zone": "B", "hazard": False, "population": 21, "capacity": 15, "label": "B13"},
-
-        # Zone C - Safe Corridor
-        {"id": 14, "x": 70,  "y": 520, "zone": "C", "hazard": False, "population": 11, "capacity": 40, "label": "C14"},
-        {"id": 15, "x": 170, "y": 520, "zone": "C", "hazard": False, "population": 13, "capacity": 42, "label": "C15"},
-        {"id": 16, "x": 50,  "y": 580, "zone": "C", "hazard": False, "population": 9,  "capacity": 35, "label": "C16"},
-        {"id": 17, "x": 100, "y": 580, "zone": "C", "hazard": False, "population": 10, "capacity": 38, "label": "C17"},
-        {"id": 18, "x": 190, "y": 580, "zone": "C", "hazard": False, "population": 8,  "capacity": 36, "label": "C18"},
-        {"id": 19, "x": 120, "y": 640, "zone": "C", "hazard": False, "population": 12, "capacity": 45, "label": "C19"},
-        {"id": 20, "x": 80,  "y": 700, "zone": "C", "hazard": False, "population": 7,  "capacity": 50, "label": "C20"},
-        {"id": 21, "x": 160, "y": 700, "zone": "C", "hazard": False, "population": 6,  "capacity": 50, "label": "C21"},
-
-        # Exit Zone
-        {"id": 22, "x": 120, "y": 760, "zone": "EXIT", "hazard": False, "population": 0, "capacity": 100, "label": "Exit-22"},
-        {"id": 23, "x": 120, "y": 820, "zone": "EXIT", "hazard": False, "population": 0, "capacity": 100, "label": "Exit-23"},
+        # START/END nodes
+        {"id": 0, "x": 100, "y": 100, "zone": "START", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 15, "capacity": 50, "label": "START"},
+        {"id": 1, "x": 600, "y": 1200, "zone": "END", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 90, "label": "END"},
+        
+        # Residential Zone 1 (ids 2-7)
+        {"id": 2, "x": 100, "y": 200, "zone": "RES1", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 10, "capacity": 40, "label": "R1-2"},
+        {"id": 3, "x": 200, "y": 200, "zone": "RES1", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 12, "capacity": 45, "label": "R1-3"},
+        {"id": 4, "x": 100, "y": 300, "zone": "RES1", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 8, "capacity": 35, "label": "R1-4"},
+        {"id": 5, "x": 200, "y": 300, "zone": "RES1", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 11, "capacity": 42, "label": "R1-5"},
+        {"id": 6, "x": 150, "y": 400, "zone": "RES1", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 9, "capacity": 38, "label": "R1-6"},
+        {"id": 7, "x": 250, "y": 400, "zone": "RES1", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 10, "capacity": 40, "label": "R1-7"},
+        
+        # Residential Zone 2 (ids 8-13)
+        {"id": 8, "x": 800, "y": 150, "zone": "RES2", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 10, "capacity": 40, "label": "R2-8"},
+        {"id": 9, "x": 900, "y": 150, "zone": "RES2", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 12, "capacity": 45, "label": "R2-9"},
+        {"id": 10, "x": 850, "y": 250, "zone": "RES2", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 8, "capacity": 35, "label": "R2-10"},
+        {"id": 11, "x": 950, "y": 250, "zone": "RES2", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 11, "capacity": 42, "label": "R2-11"},
+        {"id": 12, "x": 800, "y": 350, "zone": "RES2", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 9, "capacity": 38, "label": "R2-12"},
+        {"id": 13, "x": 900, "y": 350, "zone": "RES2", "region_type": "Residential Zone", "hazard": False, "blocked": False, "population": 10, "capacity": 40, "label": "R2-13"},
+        
+        # Transition Zone (ids 14-23)
+        {"id": 14, "x": 400, "y": 200, "zone": "TRANS1", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 6, "capacity": 30, "label": "T1-14"},
+        {"id": 15, "x": 500, "y": 200, "zone": "TRANS1", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 7, "capacity": 32, "label": "T1-15"},
+        {"id": 16, "x": 600, "y": 200, "zone": "TRANS1", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 5, "capacity": 28, "label": "T1-16"},
+        {"id": 17, "x": 450, "y": 300, "zone": "TRANS1", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 6, "capacity": 30, "label": "T1-17"},
+        {"id": 18, "x": 550, "y": 300, "zone": "TRANS1", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 8, "capacity": 35, "label": "T1-18"},
+        {"id": 19, "x": 400, "y": 450, "zone": "TRANS2", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 6, "capacity": 30, "label": "T2-19"},
+        {"id": 20, "x": 500, "y": 450, "zone": "TRANS2", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 7, "capacity": 32, "label": "T2-20"},
+        {"id": 21, "x": 600, "y": 450, "zone": "TRANS2", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 6, "capacity": 30, "label": "T2-21"},
+        {"id": 22, "x": 500, "y": 550, "zone": "TRANS2", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 8, "capacity": 35, "label": "T2-22"},
+        {"id": 23, "x": 600, "y": 550, "zone": "TRANS2", "region_type": "Transition Zone", "hazard": False, "blocked": False, "population": 7, "capacity": 32, "label": "T2-23"},
+        
+        # High-Risk Zones (ids 24-34)
+        {"id": 24, "x": 150, "y": 550, "zone": "RISK1", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 20, "capacity": 15, "label": "HR1-24"},
+        {"id": 25, "x": 250, "y": 550, "zone": "RISK1", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 22, "capacity": 18, "label": "HR1-25"},
+        {"id": 26, "x": 150, "y": 650, "zone": "RISK1", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 19, "capacity": 14, "label": "HR1-26"},
+        {"id": 27, "x": 250, "y": 650, "zone": "RISK1", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 21, "capacity": 16, "label": "HR1-27"},
+        {"id": 28, "x": 200, "y": 750, "zone": "RISK1", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 20, "capacity": 15, "label": "HR1-28"},
+        {"id": 29, "x": 800, "y": 550, "zone": "RISK2", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 20, "capacity": 15, "label": "HR2-29"},
+        {"id": 30, "x": 900, "y": 550, "zone": "RISK2", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 22, "capacity": 18, "label": "HR2-30"},
+        {"id": 31, "x": 850, "y": 650, "zone": "RISK2", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 19, "capacity": 14, "label": "HR2-31"},
+        {"id": 32, "x": 950, "y": 650, "zone": "RISK2", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 21, "capacity": 16, "label": "HR2-32"},
+        {"id": 33, "x": 850, "y": 750, "zone": "RISK2", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 20, "capacity": 15, "label": "HR2-33"},
+        {"id": 34, "x": 950, "y": 750, "zone": "RISK2", "region_type": "High-Risk Zone", "hazard": False, "blocked": False, "population": 18, "capacity": 12, "label": "HR2-34"},
+        
+        # Control Zones (ids 35-40)
+        {"id": 35, "x": 350, "y": 900, "zone": "CTRL1", "region_type": "Conflict / Control Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 18, "label": "C1-35"},
+        {"id": 36, "x": 450, "y": 900, "zone": "CTRL1", "region_type": "Conflict / Control Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 16, "label": "C1-36"},
+        {"id": 37, "x": 400, "y": 1000, "zone": "CTRL1", "region_type": "Conflict / Control Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 20, "label": "C1-37"},
+        {"id": 38, "x": 650, "y": 900, "zone": "CTRL2", "region_type": "Conflict / Control Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 18, "label": "C2-38"},
+        {"id": 39, "x": 750, "y": 900, "zone": "CTRL2", "region_type": "Conflict / Control Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 16, "label": "C2-39"},
+        {"id": 40, "x": 700, "y": 1000, "zone": "CTRL2", "region_type": "Conflict / Control Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 20, "label": "C2-40"},
+        
+        # Safe Zones (ids 41-50)
+        {"id": 41, "x": 550, "y": 1100, "zone": "SAFE1", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 80, "label": "S1-41"},
+        {"id": 42, "x": 650, "y": 1100, "zone": "SAFE1", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 85, "label": "S1-42"},
+        {"id": 43, "x": 550, "y": 1200, "zone": "SAFE1", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 1, "capacity": 75, "label": "S1-43"},
+        {"id": 44, "x": 650, "y": 1200, "zone": "SAFE1", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 2, "capacity": 90, "label": "S1-44"},
+        {"id": 45, "x": 150, "y": 1100, "zone": "SAFE2", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 70, "label": "S2-45"},
+        {"id": 46, "x": 250, "y": 1100, "zone": "SAFE2", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 1, "capacity": 75, "label": "S2-46"},
+        {"id": 47, "x": 200, "y": 1200, "zone": "SAFE2", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 2, "capacity": 80, "label": "S2-47"},
+        {"id": 48, "x": 850, "y": 1100, "zone": "SAFE3", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 0, "capacity": 75, "label": "S3-48"},
+        {"id": 49, "x": 950, "y": 1100, "zone": "SAFE3", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 1, "capacity": 80, "label": "S3-49"},
+        {"id": 50, "x": 900, "y": 1200, "zone": "SAFE3", "region_type": "Safe Zone", "hazard": False, "blocked": False, "population": 2, "capacity": 85, "label": "S3-50"},
     ]
-
-    edges = [
-        # Zone A (bidirectional)
-        {"from": 0, "to": 1, "cost": 2, "risk": 1.0, "capacity": 40, "hazard": False, "blocked": False},
-        {"from": 1, "to": 0, "cost": 2, "risk": 1.0, "capacity": 40, "hazard": False, "blocked": False},
-        {"from": 0, "to": 2, "cost": 1, "risk": 1.0, "capacity": 45, "hazard": False, "blocked": False},
-        {"from": 2, "to": 0, "cost": 1, "risk": 1.0, "capacity": 45, "hazard": False, "blocked": False},
-        {"from": 1, "to": 3, "cost": 2, "risk": 1.2, "capacity": 35, "hazard": False, "blocked": False},
-        {"from": 3, "to": 1, "cost": 2, "risk": 1.2, "capacity": 35, "hazard": False, "blocked": False},
-        {"from": 2, "to": 3, "cost": 2, "risk": 1.2, "capacity": 35, "hazard": False, "blocked": False},
-        {"from": 3, "to": 2, "cost": 2, "risk": 1.2, "capacity": 35, "hazard": False, "blocked": False},
-        {"from": 2, "to": 4, "cost": 3, "risk": 1.4, "capacity": 30, "hazard": False, "blocked": False},
-        {"from": 4, "to": 2, "cost": 3, "risk": 1.4, "capacity": 30, "hazard": False, "blocked": False},
-        {"from": 3, "to": 5, "cost": 2, "risk": 1.2, "capacity": 35, "hazard": False, "blocked": False},
-        {"from": 5, "to": 3, "cost": 2, "risk": 1.2, "capacity": 35, "hazard": False, "blocked": False},
-        {"from": 4, "to": 5, "cost": 2, "risk": 1.2, "capacity": 30, "hazard": False, "blocked": False},
-        {"from": 5, "to": 4, "cost": 2, "risk": 1.2, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 5, "to": 6, "cost": 3, "risk": 1.6, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 6, "to": 5, "cost": 3, "risk": 1.6, "capacity": 25, "hazard": False, "blocked": False},
-
-        # Zone B (dangerous, bidirectional)
-        {"from": 6, "to": 7, "cost": 7, "risk": 4.5, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 7, "to": 6, "cost": 7, "risk": 4.5, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 6, "to": 8, "cost": 8, "risk": 4.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 8, "to": 6, "cost": 8, "risk": 4.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 7, "to": 9, "cost": 6, "risk": 4.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 9, "to": 7, "cost": 6, "risk": 4.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 8, "to": 9, "cost": 6, "risk": 4.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 9, "to": 8, "cost": 6, "risk": 4.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 7, "to": 10, "cost": 8, "risk": 4.6, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 10, "to": 7, "cost": 8, "risk": 4.6, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 8, "to": 11, "cost": 8, "risk": 4.6, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 11, "to": 8, "cost": 8, "risk": 4.6, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 9, "to": 12, "cost": 7, "risk": 4.4, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 12, "to": 9, "cost": 7, "risk": 4.4, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 10, "to": 12, "cost": 9, "risk": 4.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 12, "to": 10, "cost": 9, "risk": 4.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 11, "to": 12, "cost": 9, "risk": 4.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 12, "to": 11, "cost": 9, "risk": 4.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 12, "to": 13, "cost": 7, "risk": 4.2, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 13, "to": 12, "cost": 7, "risk": 4.2, "capacity": 25, "hazard": False, "blocked": False},
-
-        # Zone C (bidirectional)
-        {"from": 13, "to": 14, "cost": 4, "risk": 2.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 14, "to": 13, "cost": 4, "risk": 2.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 13, "to": 15, "cost": 4, "risk": 2.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 15, "to": 13, "cost": 4, "risk": 2.0, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 14, "to": 16, "cost": 3, "risk": 1.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 16, "to": 14, "cost": 3, "risk": 1.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 14, "to": 17, "cost": 3, "risk": 1.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 17, "to": 14, "cost": 3, "risk": 1.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 15, "to": 18, "cost": 3, "risk": 1.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 18, "to": 15, "cost": 3, "risk": 1.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 16, "to": 19, "cost": 4, "risk": 1.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 19, "to": 16, "cost": 4, "risk": 1.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 17, "to": 19, "cost": 4, "risk": 1.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 19, "to": 17, "cost": 4, "risk": 1.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 18, "to": 19, "cost": 4, "risk": 1.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 19, "to": 18, "cost": 4, "risk": 1.9, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 19, "to": 20, "cost": 2, "risk": 1.2, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 20, "to": 19, "cost": 2, "risk": 1.2, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 19, "to": 21, "cost": 2, "risk": 1.2, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 21, "to": 19, "cost": 2, "risk": 1.2, "capacity": 25, "hazard": False, "blocked": False},
-
-        # Exit (bidirectional)
-        {"from": 20, "to": 22, "cost": 1, "risk": 0.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 22, "to": 20, "cost": 1, "risk": 0.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 21, "to": 22, "cost": 1, "risk": 0.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 22, "to": 21, "cost": 1, "risk": 0.8, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 22, "to": 23, "cost": 1, "risk": 0.5, "capacity": 25, "hazard": False, "blocked": False},
-        {"from": 23, "to": 22, "cost": 1, "risk": 0.5, "capacity": 25, "hazard": False, "blocked": False},
+    
+    # Define edges as tuples: (from_id, to_id, cost, risk, capacity)
+    edges_list = [
+        # START to Residential
+        (0, 2, 2.0, 1.0, 45),
+        (0, 3, 2.0, 1.0, 45),
+        
+        # Residential 1 internal
+        (2, 3, 2.0, 1.0, 40),
+        (2, 4, 2.0, 1.0, 40),
+        (3, 5, 2.0, 1.0, 40),
+        (4, 5, 2.0, 1.0, 40),
+        (4, 6, 2.0, 1.0, 40),
+        (5, 7, 2.0, 1.0, 40),
+        (6, 7, 2.0, 1.0, 40),
+        
+        # Residential 2 internal
+        (8, 9, 2.0, 1.0, 40),
+        (8, 10, 2.0, 1.0, 40),
+        (9, 11, 2.0, 1.0, 40),
+        (10, 11, 2.0, 1.0, 40),
+        (10, 12, 2.0, 1.0, 40),
+        (11, 13, 2.0, 1.0, 40),
+        (12, 13, 2.0, 1.0, 40),
+        
+        # Transition 1 internal
+        (14, 15, 3.0, 1.5, 35),
+        (15, 16, 3.0, 1.5, 35),
+        (14, 17, 3.0, 1.5, 35),
+        (15, 17, 3.0, 1.5, 35),
+        (15, 18, 3.0, 1.5, 35),
+        (16, 18, 3.0, 1.5, 35),
+        (17, 18, 3.0, 1.5, 35),
+        
+        # Transition 2 internal
+        (19, 20, 3.0, 1.5, 35),
+        (20, 21, 3.0, 1.5, 35),
+        (19, 22, 3.0, 1.5, 35),
+        (20, 22, 3.0, 1.5, 35),
+        (21, 23, 3.0, 1.5, 35),
+        (22, 23, 3.0, 1.5, 35),
+        
+        # Residential to Transition
+        (5, 14, 3.0, 1.4, 38),
+        (7, 17, 3.0, 1.4, 38),
+        (8, 16, 3.0, 1.4, 38),
+        (12, 18, 3.0, 1.4, 38),
+        (6, 19, 3.0, 1.4, 38),
+        (13, 21, 3.0, 1.4, 38),
+        
+        # High-Risk 1 internal
+        (24, 25, 7.0, 4.5, 22),
+        (24, 26, 7.0, 4.5, 22),
+        (25, 27, 7.0, 4.5, 22),
+        (26, 27, 7.0, 4.5, 22),
+        (26, 28, 7.0, 4.5, 22),
+        (27, 28, 7.0, 4.5, 22),
+        
+        # High-Risk 2 internal
+        (29, 30, 7.0, 4.5, 22),
+        (29, 31, 7.0, 4.5, 22),
+        (30, 32, 7.0, 4.5, 22),
+        (31, 32, 7.0, 4.5, 22),
+        (31, 33, 7.0, 4.5, 22),
+        (32, 34, 7.0, 4.5, 22),
+        (33, 34, 7.0, 4.5, 22),
+        
+        # Transition to High-Risk
+        (17, 24, 5.0, 3.5, 28),
+        (18, 25, 5.0, 3.5, 28),
+        (18, 29, 5.0, 3.5, 28),
+        (19, 26, 5.0, 3.5, 28),
+        (22, 27, 5.0, 3.5, 28),
+        (23, 32, 5.0, 3.5, 28),
+        (21, 30, 5.0, 3.5, 28),
+        
+        # Control zones internal
+        (35, 36, 6.0, 5.0, 18),
+        (35, 37, 6.0, 5.0, 18),
+        (36, 37, 6.0, 5.0, 18),
+        (38, 39, 6.0, 5.0, 18),
+        (38, 40, 6.0, 5.0, 18),
+        (39, 40, 6.0, 5.0, 18),
+        
+        # High-Risk to Control
+        (27, 36, 8.0, 5.2, 20),
+        (33, 38, 8.0, 5.2, 20),
+        
+        # Safe Zone 1 internal
+        (41, 42, 1.0, 0.8, 80),
+        (41, 43, 1.0, 0.8, 80),
+        (42, 44, 1.0, 0.8, 80),
+        (43, 44, 1.0, 0.8, 80),
+        
+        # Safe Zone 2 internal
+        (45, 46, 1.0, 0.8, 80),
+        (45, 47, 1.0, 0.8, 80),
+        (46, 47, 1.0, 0.8, 80),
+        
+        # Safe Zone 3 internal
+        (48, 49, 1.0, 0.8, 80),
+        (48, 50, 1.0, 0.8, 80),
+        (49, 50, 1.0, 0.8, 80),
+        
+        # High-Risk to Safe (bypassing Control zones - no overlap)
+        (28, 45, 7.0, 3.5, 30),
+        (27, 41, 7.0, 3.5, 30),
+        (25, 46, 8.0, 3.7, 25),
+        (33, 48, 7.0, 3.5, 28),
+        (34, 49, 7.0, 3.5, 28),
+        
+        # Safe to END
+        (43, 1, 1.0, 0.5, 85),
+        (44, 1, 1.0, 0.5, 85),
     ]
-
+    
+    # Convert edge tuples to dict and make bidirectional
+    edges = []
+    
+    for from_id, to_id, cost, risk, capacity in edges_list:
+        # Forward direction
+        edges.append({
+            "from": from_id,
+            "to": to_id,
+            "cost": cost,
+            "risk": risk,
+            "capacity": capacity,
+            "hazard": False,
+            "blocked": False,
+        })
+        # Reverse direction
+        edges.append({
+            "from": to_id,
+            "to": from_id,
+            "cost": cost,
+            "risk": risk,
+            "capacity": capacity,
+            "hazard": False,
+            "blocked": False,
+        })
+    
+    # Region profiles for attributes
+    region_profiles = {
+        "Residential Zone": {"risk_level": 2.0, "hazard_probability": 0.15, "congestion_score": 0.5},
+        "Transition Zone": {"risk_level": 3.5, "hazard_probability": 0.35, "congestion_score": 0.7},
+        "High-Risk Zone": {"risk_level": 8.0, "hazard_probability": 0.75, "congestion_score": 0.9},
+        "Conflict / Control Zone": {"risk_level": 9.0, "hazard_probability": 0.85, "congestion_score": 0.95},
+        "Safe Zone": {"risk_level": 0.5, "hazard_probability": 0.05, "congestion_score": 0.2},
+    }
+    
+    # Apply region profiles to nodes
+    for node in nodes:
+        region_type = node.get("region_type", "Transition Zone")
+        profile = region_profiles.get(region_type, region_profiles["Transition Zone"])
+        node.setdefault("risk_level", profile["risk_level"])
+        node.setdefault("hazard_probability", profile["hazard_probability"])
+        node.setdefault("congestion_score", profile["congestion_score"])
+    
+    # Apply region-based multipliers to edges
+    region_bonuses = {
+        frozenset(["Residential Zone", "Residential Zone"]): 0.85,
+        frozenset(["Transition Zone", "Transition Zone"]): 0.9,
+        frozenset(["Safe Zone", "Safe Zone"]): 0.8,
+    }
+    region_penalties = {
+        frozenset(["Residential Zone", "High-Risk Zone"]): 1.6,
+        frozenset(["Transition Zone", "High-Risk Zone"]): 1.3,
+        frozenset(["Safe Zone", "High-Risk Zone"]): 1.8,
+        frozenset(["Residential Zone", "Conflict / Control Zone"]): 2.0,
+    }
+    
+    node_regions = {node["id"]: node.get("region_type") for node in nodes}
+    
+    for edge in edges:
+        if not edge.get("blocked"):
+            region_a = node_regions.get(edge["from"])
+            region_b = node_regions.get(edge["to"])
+            if region_a and region_b:
+                pair = frozenset([region_a, region_b])
+                multiplier = region_bonuses.get(pair) or region_penalties.get(pair)
+                if multiplier:
+                    edge["cost"] = edge["cost"] * multiplier
+                    edge["risk"] = edge["risk"] * multiplier
+        
+        edge.setdefault("base_distance", edge["cost"])
+        edge.setdefault("dynamic_cost", edge["base_distance"] * edge["risk"])
+    
     return {
         "nodes": nodes,
         "edges": edges,
         "start": 0,
-        "end": 23
-    }
-
-
-def get_zone_metadata():
-    """Return zone-specific constraints and properties"""
-    return {
-        "A": {
-            "name": "Safe Entry Zone",
-            "color": "#4ade80",  # green
-            "time_window": {"min": 0, "max": 10},  # minutes
-            "description": "Initial safe zone - must evacuate within 10 minutes"
-        },
-        "B": {
-            "name": "Danger Zone",
-            "color": "#f87171",  # red
-            "time_window": {"min": 5, "max": 15},  # minutes
-            "description": "High-risk area - limited time window"
-        },
-        "C": {
-            "name": "Safe Corridor",
-            "color": "#60a5fa",  # blue
-            "time_window": {"min": 10, "max": 20},  # minutes
-            "description": "Transit zone towards exit"
-        },
-        "EXIT": {
-            "name": "Exit Zone",
-            "color": "#a78bfa",  # purple
-            "time_window": {"min": 0, "max": 30},  # minutes
-            "description": "Final evacuation point"
-        }
-    }
-
-
-def get_constraint_config():
-    """Hard constraints for evacuation problem"""
-    return {
-        "vehicle_capacity": 50,  # people per rescue vehicle
-        "num_vehicles": 3,  # available rescue teams
-        "total_population": 301,  # sum of all node populations
-        "time_limit": 30,  # minutes to complete evacuation
-        "constraint_penalty": 1000,  # penalty weight for constraint violations
+        "end": 1
     }

@@ -43,9 +43,6 @@
                         <button id="modeEnd" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg transition">
                             Select End Node
                         </button>
-                        <button id="modeHazard" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-3 rounded-lg transition">
-                            Toggle Hazard Node
-                        </button>
                         <button id="modeBlocked" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-semibold py-2 px-3 rounded-lg transition">
                             Toggle Blocked Node
                         </button>
@@ -75,11 +72,8 @@
 
                 <!-- Buttons -->
                 <div class="space-y-2 pt-4">
-                    <button id="predictBtn" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 active:scale-100">
-                        🤖 Get AI Predictions
-                    </button>
                     <button id="solveBtn" class="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 active:scale-100">
-                        Find Path
+                        🚀 Find Path (with AI)
                     </button>
                     <button id="resetBtn" class="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-4 rounded-lg transition">
                         Reset
@@ -148,50 +142,6 @@
                             </div>
                             <div id="highRiskList" class="text-xs text-gray-500 mt-1"></div>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Constraints Info Section (Below Graph) -->
-        <div class="px-6 pb-6">
-            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="bg-gradient-to-r from-purple-500 to-indigo-500 px-6 py-4">
-                    <h3 class="text-2xl font-bold text-white flex items-center gap-2">
-                        <span>⚙️</span>
-                        <span>Evacuation Constraints & Zone Information</span>
-                    </h3>
-                    <p class="text-purple-100 text-sm mt-1">System configuration and operational parameters</p>
-                </div>
-                
-                <div class="p-6">
-                    <!-- Config Summary Cards -->
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                        <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border-l-4 border-purple-500">
-                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Vehicle Capacity</div>
-                            <div id="vehicleCapacity" class="text-2xl font-bold text-purple-700"></div>
-                        </div>
-                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border-l-4 border-blue-500">
-                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Available Vehicles</div>
-                            <div id="numVehicles" class="text-2xl font-bold text-blue-700"></div>
-                        </div>
-                        <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border-l-4 border-indigo-500">
-                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Total Population</div>
-                            <div id="totalPopulation" class="text-2xl font-bold text-indigo-700"></div>
-                        </div>
-                        <div class="bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-4 border-l-4 border-pink-500">
-                            <div class="text-xs text-gray-600 font-semibold uppercase mb-1">Time Limit</div>
-                            <div id="timeLimit" class="text-2xl font-bold text-pink-700"></div>
-                        </div>
-                    </div>
-
-                    <!-- Zones -->
-                    <div>
-                        <h4 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                            <span class="text-purple-600">📍</span>
-                            <span>Evacuation Zones & Time Windows</span>
-                        </h4>
-                        <div id="zonesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
                     </div>
                 </div>
             </div>

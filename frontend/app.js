@@ -24,13 +24,42 @@ const mapBounds = {
 
 const CLASSICAL_ALGOS = new Set(['dijkstra', 'dynamic_programming', 'astar', 'genetic']);
 const ALGO_MULTIPLIERS = {
-    dijkstra: 600,
-    astar: 500,
-    dynamic_programming: 750,
-    genetic: 1000,
+    dijkstra: 300,
+    astar: 250,
+    dynamic_programming: 380,
+    genetic: 500,
     quantum: 1
 };
 
+const DEFAULT_WEIGHTS = {
+    distance_weight: 1.0,
+    risk_weight: 0.5,
+    hazard_weight: 0.7,
+    congestion_weight: 0.5
+};
+const REGION_COLORS = {
+    'Residential Zone': { fill: '#3b82f6', border: '#1d4ed8' },
+    'Transition Zone': { fill: '#9ca3af', border: '#6b7280' },
+    'High-Risk Zone': { fill: '#ef4444', border: '#b91c1c' },
+    'Conflict / Control Zone': { fill: '#111827', border: '#7f1d1d' },
+    'Safe Zone': { fill: '#22c55e', border: '#15803d' },
+    default: { fill: '#64748b', border: '#e2e8f0' }
+};
+
+function isConflictRegion(regionA, regionB) {
+    if (!regionA || !regionB) return false;
+    const key = `${regionA}::${regionB}`;
+    const conflicts = new Set([
+        'Residential Zone::High-Risk Zone',
+        'High-Risk Zone::Residential Zone',
+        'Safe Zone::High-Risk Zone',
+        'High-Risk Zone::Safe Zone',
+        'Residential Zone::Conflict / Control Zone',
+        'Conflict / Control Zone::Residential Zone'
+        // Safe Zone <-> Conflict / Control Zone removed (no overlap)
+    ]);
+    return conflicts.has(key);
+}
 function showToast(message, type = 'info', timeout = 3500) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
@@ -97,7 +126,6 @@ function setSolveStatus(message) {
     const statusEl = document.getElementById('solveStatus');
     const overlayEl = document.getElementById('loadingOverlay');
     const overlayText = document.getElementById('loadingText');
-    const predictBtn = document.getElementById('predictBtn');
     if (!statusEl) return;
     if (message) {
         statusEl.textContent = message;
@@ -108,11 +136,6 @@ function setSolveStatus(message) {
             overlayEl.classList.remove('hidden');
             overlayEl.style.display = 'flex';
         }
-        // Disable AI predictions button during route computation
-        if (predictBtn) {
-            predictBtn.disabled = true;
-            predictBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        }
     } else {
         statusEl.textContent = '';
         statusEl.classList.add('hidden');
@@ -120,11 +143,6 @@ function setSolveStatus(message) {
         if (overlayEl) {
             overlayEl.classList.add('hidden');
             overlayEl.style.display = 'none';
-        }
-        // Re-enable AI predictions button
-        if (predictBtn) {
-            predictBtn.disabled = false;
-            predictBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
 }
@@ -136,31 +154,20 @@ async function initializeApp() {
         const response = await fetch(`${API_BASE}/graph`);
         graphData = await response.json();
         hazardNodes = new Set(graphData.nodes.filter(n => n.hazard).map(n => n.id));
-        blockedNodes = new Set(graphData.nodes.filter(n => n.blocked).map(n => n.id));
-        updateBlockedNodesList();
         drawGraph();
     } catch (error) {
         console.error('Failed to load graph:', error);
         showToast('Could not connect to backend. Make sure the server is running on port 9000.', 'error');
     }
 
-    // Load and display constraints
-    try {
-        const constraintsResp = await fetch(`${API_BASE}/constraints/info`);
-        const constraintsData = await constraintsResp.json();
-        displayConstraints(constraintsData);
-    } catch (error) {
-        console.error('Failed to load constraints:', error);
-    }
+
 
     // Event listeners
     document.getElementById('solveBtn').addEventListener('click', solveRouting);
     document.getElementById('resetBtn').addEventListener('click', resetVisualization);
-    document.getElementById('predictBtn').addEventListener('click', fetchPredictions);
 
     document.getElementById('modeStart').addEventListener('click', () => setEditMode('start'));
     document.getElementById('modeEnd').addEventListener('click', () => setEditMode('end'));
-    document.getElementById('modeHazard').addEventListener('click', () => setEditMode('hazard'));
     document.getElementById('modeBlocked').addEventListener('click', () => setEditMode('blocked'));
 
     setEditMode('start');
@@ -171,7 +178,6 @@ function setEditMode(mode) {
     const buttons = {
         start: document.getElementById('modeStart'),
         end: document.getElementById('modeEnd'),
-        hazard: document.getElementById('modeHazard'),
         blocked: document.getElementById('modeBlocked')
     };
 
@@ -209,7 +215,7 @@ function getGraphBounds() {
     return { minX, maxX, minY, maxY };
 }
 
-function toLatLng(node) {
+function nodeToLatLng(node) {
     const { minX, maxX, minY, maxY } = getGraphBounds();
     const xRange = maxX - minX || 1;
     const yRange = maxY - minY || 1;
@@ -219,6 +225,10 @@ function toLatLng(node) {
     const lat = mapBounds.maxLat - yRatio * (mapBounds.maxLat - mapBounds.minLat);
     const lng = mapBounds.minLng + xRatio * (mapBounds.maxLng - mapBounds.minLng);
     return [lat, lng];
+}
+
+function toLatLng(node) {
+    return nodeToLatLng(node);
 }
 
 function drawGraph() {
@@ -256,6 +266,7 @@ function drawEdgesMap() {
         let strokeColor = '#9ca3af';
         let lineWidth = 2;
         let opacity = 0.6;
+        let dashArray = null;
 
         if (edge.blocked) {
             strokeColor = '#111827';
@@ -269,12 +280,27 @@ function drawEdgesMap() {
             strokeColor = '#facc15';
             lineWidth = 4;
             opacity = 0.95;
+        } else {
+            const risk = edge.risk ?? 1.0;
+            if (risk >= 4.0) {
+                strokeColor = '#dc2626';
+            } else if (risk >= 2.0) {
+                strokeColor = '#f97316';
+            } else {
+                strokeColor = '#22c55e';
+            }
+
+            if (isConflictRegion(fromNode.region_type, toNode.region_type)) {
+                dashArray = '6 6';
+                opacity = 0.45;
+            }
         }
 
         L.polyline([fromLatLng, toLatLngCoords], {
             color: strokeColor,
             weight: lineWidth,
-            opacity
+            opacity,
+            dashArray
         }).addTo(edgeLayer);
     });
 }
@@ -293,14 +319,20 @@ function drawPathMap() {
 
 function drawNodesMap() {
     graphData.nodes.forEach(node => {
-        let fillColor = '#6366f1';
-        let borderColor = '#ffffff';
+        // Start with region_type colors as base
+        let regionColor = REGION_COLORS[node.region_type] || REGION_COLORS.default;
+        let fillColor = regionColor.fill;
+        let borderColor = regionColor.border;
         let borderWidth = 2;
         let radius = 7;
 
         // Check predictions for traffic/hazard overlays
         let nodeTraffic = trafficData ? trafficData.nodes[node.id] : null;
         let nodeHazardPred = hazardPredictions ? hazardPredictions.predictions[node.id] : null;
+        
+        // Preserve High-Risk Zone color identity
+        const isHighRiskZone = node.region_type === 'High-Risk Zone';
+        const isConflictZone = node.region_type === 'Conflict / Control Zone';
 
         if (blockedNodes.has(node.id)) {
             fillColor = '#1f2937';
@@ -308,32 +340,56 @@ function drawNodesMap() {
             borderWidth = 3;
             radius = 8;  // Slightly larger to make blocked nodes stand out
         } else if (node.id === selectedStart) {
-            fillColor = '#22c55e';
+            fillColor = '#22c55e';  // Green - original start color
         } else if (node.id === selectedEnd) {
-            fillColor = '#ef4444';
+            fillColor = '#ef4444';  // Red - original end color
         } else if (hazardNodes.has(node.id)) {
             fillColor = '#f97316';
         } else if (solvedPath && solvedPath.path.includes(node.id)) {
             fillColor = '#facc15';
         } else if (nodeHazardPred && nodeHazardPred.probability >= 70) {
-            // Critical hazard risk - red tint
-            fillColor = '#fca5a5';
-            borderColor = '#ef4444';
+            // Critical hazard prediction - but preserve High-Risk/Conflict zones' base colors
+            if (isHighRiskZone || isConflictZone) {
+                // Keep original color, add pulsing border
+                borderColor = '#fbbf24';
+                borderWidth = 4;
+                radius = 8;
+            } else {
+                // Other zones get red tint
+                fillColor = '#fca5a5';
+                borderColor = '#ef4444';
+            }
         } else if (nodeHazardPred && nodeHazardPred.probability >= 50) {
-            // High hazard risk - orange tint
-            fillColor = '#fdba74';
-            borderColor = '#f97316';
+            // High hazard prediction - preserve dangerous zones
+            if (isHighRiskZone || isConflictZone) {
+                // Keep original color, add warning border
+                borderColor = '#fb923c';
+                borderWidth = 3;
+            } else {
+                // Other zones get orange tint
+                fillColor = '#fdba74';
+                borderColor = '#f97316';
+            }
         } else if (nodeTraffic && nodeTraffic > 70) {
-            // High traffic - dark red tint
-            fillColor = '#fb923c';
-            borderColor = '#ea580c';
+            // High traffic - preserve dangerous zone colors
+            if (isHighRiskZone || isConflictZone) {
+                borderColor = '#ea580c';
+                borderWidth = 3;
+            } else {
+                fillColor = '#fb923c';
+                borderColor = '#ea580c';
+            }
         } else if (nodeTraffic && nodeTraffic > 50) {
-            // Moderate-high traffic - orange tint
-            fillColor = '#fbbf24';
-            borderColor = '#f59e0b';
+            // Moderate-high traffic
+            if (!isHighRiskZone && !isConflictZone) {
+                fillColor = '#fbbf24';
+                borderColor = '#f59e0b';
+            }
         } else if (nodeTraffic && nodeTraffic > 30) {
-            // Moderate traffic - yellow tint
-            fillColor = '#fcd34d';
+            // Moderate traffic
+            if (!isHighRiskZone && !isConflictZone) {
+                fillColor = '#fcd34d';
+            }
         }
 
         const marker = L.circleMarker(toLatLng(node), {
@@ -366,10 +422,6 @@ function drawNodesMap() {
                 selectedEnd = node.id;
                 drawGraph();
                 return;
-            }
-
-            if (editMode === 'hazard') {
-                toggleSingleNodeHazard(node.id);
             }
 
             if (editMode === 'blocked') {
@@ -441,11 +493,22 @@ function drawLegendMap() {
         const div = L.DomUtil.create('div', 'bg-white rounded shadow-md p-2 text-xs');
         div.innerHTML = `
             <div class="font-bold mb-1">Legend</div>
-            <div class="flex items-center gap-2"><span style="background:#22c55e;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Start</div>
-            <div class="flex items-center gap-2"><span style="background:#ef4444;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> End / Hazard</div>
-            <div class="flex items-center gap-2"><span style="background:#6366f1;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Node</div>
-            <div class="flex items-center gap-2"><span style="background:#facc15;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Path</div>
-            <div class="flex items-center gap-2"><span style="background:#111827;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Blocked</div>
+            <div class="font-semibold mt-1">Region Types</div>
+            <div class="flex items-center gap-2"><span style="background:#3b82f6;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Residential Zone</div>
+            <div class="flex items-center gap-2"><span style="background:#9ca3af;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Transition Zone</div>
+            <div class="flex items-center gap-2"><span style="background:#ef4444;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> High-Risk Zone*</div>
+            <div class="flex items-center gap-2"><span style="background:#111827;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Control/Bottleneck*</div>
+            <div class="flex items-center gap-2"><span style="background:#22c55e;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Safe Zone</div>
+            <div class="text-[10px] italic mt-1 text-gray-600">*AI predictions use border styling</div>
+            <div class="font-semibold mt-2">Special States</div>
+            <div class="flex items-center gap-2"><span style="background:#f97316;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Manual Hazard</div>
+            <div class="flex items-center gap-2"><span style="background:#1f2937;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Blocked</div>
+            <div class="flex items-center gap-2"><span style="background:#facc15;width:10px;height:10px;display:inline-block;border-radius:2px;"></span> Active Path</div>
+            <div class="font-semibold mt-2">Edge Risk</div>
+            <div class="flex items-center gap-2"><span style="background:#22c55e;width:16px;height:2px;display:inline-block;"></span> Low Risk (&lt;2.0)</div>
+            <div class="flex items-center gap-2"><span style="background:#f97316;width:16px;height:2px;display:inline-block;"></span> Medium Risk</div>
+            <div class="flex items-center gap-2"><span style="background:#dc2626;width:16px;height:2px;display:inline-block;"></span> High Risk (≥4.0)</div>
+            <div class="flex items-center gap-2"><span style="border-top:2px dashed #6b7280;width:16px;display:inline-block;"></span> Conflict Link</div>
         `;
         return div;
     };
@@ -501,9 +564,54 @@ async function solveRouting() {
         return;
     }
 
+    // Step 1: Compute AI predictions
+    setSolveStatus('🤖 Computing AI predictions...');
+    await new Promise(requestAnimationFrame);
+    
+    try {
+        const algorithm = document.getElementById('algorithmSelect').value;
+        const hazardList = Array.from(hazardNodes).join(',');
+        const blockedList = Array.from(blockedNodes).join(',');
+
+        // Fetch all predictions in parallel
+        const [trafficResp, hazardResp, qualityResp] = await Promise.all([
+            fetch(`${API_BASE}/predict/traffic?hazard_nodes=${hazardList}&blocked_nodes=${blockedList}`),
+            fetch(`${API_BASE}/predict/hazards?node_ids=${hazardList}&blocked_nodes=${blockedList}`),
+            fetch(`${API_BASE}/predict/route-quality?start=${selectedStart}&end=${selectedEnd}&algorithm=${algorithm}&hazard_nodes=${hazardList}&blocked_nodes=${blockedList}`)
+        ]);
+
+        // Check for response errors
+        if (!trafficResp.ok || !hazardResp.ok || !qualityResp.ok) {
+            setSolveStatus('');
+            showToast('Could not fetch AI predictions. Proceeding without predictions.', 'warning');
+        } else {
+            trafficData = await trafficResp.json();
+            hazardPredictions = await hazardResp.json();
+            routeQualityData = await qualityResp.json();
+
+            // Check if any response is an error object
+            if (!trafficData.detail && !hazardPredictions.detail && !routeQualityData.detail) {
+                displayPredictions();
+                drawGraph(); // Redraw with prediction overlays
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching predictions:', error);
+        showToast('AI predictions failed. Proceeding without predictions.', 'warning');
+    }
+
+    // Step 2: Find path
+    setSolveStatus('🔍 Finding optimal path...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Step 2: Find path
+    setSolveStatus('🔍 Finding optimal path...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     // Check route quality prediction if available
     if (routeQualityData) {
         if (routeQualityData.recommendation === 'REJECT') {
+            setSolveStatus('');
             const confirmed = await showConfirm(
                 'AI Prediction: REJECT',
                 `${routeQualityData.reason}\n\nSuccess probability: ${routeQualityData.success_probability}%\n\nProceed anyway?`
@@ -511,6 +619,7 @@ async function solveRouting() {
             if (!confirmed) {
                 return;
             }
+            setSolveStatus('🔍 Finding optimal path...');
         } else if (routeQualityData.recommendation === 'SLOW') {
             // No prompt for slow predictions
         } else if (routeQualityData.recommendation === 'CAUTION') {
@@ -529,12 +638,9 @@ async function solveRouting() {
         }
     }
 
-    const algorithm = document.getElementById('algorithmSelect').value;
-    setSolveStatus('Computing route...');
-    await new Promise(requestAnimationFrame);
-    await new Promise(requestAnimationFrame);
-
     try {
+        const algorithm = document.getElementById('algorithmSelect').value;
+        
         // Update blocked nodes on backend first (always sync to clear old blocks)
         await fetch(`${API_BASE}/graph/constraints`, {
             method: 'POST',
@@ -733,46 +839,6 @@ function displayPredictions() {
     } else {
         document.getElementById('highRiskList').textContent = 'All nodes at acceptable risk levels';
     }
-}
-
-function displayConstraints(constraintsData) {
-    const config = constraintsData.config;
-    const zones = constraintsData.zones;
-    
-    // Display config summary with just the values
-    document.getElementById('vehicleCapacity').textContent = config.vehicle_capacity + ' units';
-    document.getElementById('numVehicles').textContent = config.num_vehicles;
-    document.getElementById('totalPopulation').textContent = config.total_population + ' people';
-    document.getElementById('timeLimit').textContent = config.time_limit + ' min';
-    
-    // Display zones in a grid layout
-    const zonesList = document.getElementById('zonesList');
-    zonesList.innerHTML = '';
-    
-    Object.entries(zones).forEach(([zoneKey, zoneInfo]) => {
-        const zoneEl = document.createElement('div');
-        zoneEl.className = 'bg-gradient-to-br from-white to-gray-50 rounded-xl p-4 border-2 shadow-sm hover:shadow-md transition-shadow';
-        zoneEl.style.borderColor = zoneInfo.color;
-        
-        const timeWindow = zoneInfo.time_window;
-        const zoneHtml = `
-            <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 rounded-full" style="background-color: ${zoneInfo.color};"></div>
-                    <strong class="font-bold text-lg" style="color: ${zoneInfo.color};">${zoneInfo.name}</strong>
-                </div>
-                <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">${zoneKey}</span>
-            </div>
-            <p class="text-gray-700 text-sm mb-3">${zoneInfo.description}</p>
-            <div class="bg-gray-100 rounded-lg px-3 py-2 flex items-center justify-between">
-                <span class="text-xs text-gray-600 font-semibold">Time Window</span>
-                <span class="text-sm font-bold" style="color: ${zoneInfo.color};">${timeWindow.min}-${timeWindow.max} min</span>
-            </div>
-        `;
-        
-        zoneEl.innerHTML = zoneHtml;
-        zonesList.appendChild(zoneEl);
-    });
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);

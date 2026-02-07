@@ -14,7 +14,12 @@ class NodeModel(BaseModel):
     x: float
     y: float
     zone: str
+    region_type: Optional[str] = None
     hazard: bool = False
+    blocked: bool = False
+    risk_level: Optional[float] = None
+    hazard_probability: Optional[float] = None
+    congestion_score: Optional[float] = None
     population: Optional[int] = None
     capacity: Optional[int] = None
     label: Optional[str] = None
@@ -27,6 +32,8 @@ class EdgeModel(BaseModel):
 
     from_node: int = Field(alias="from")
     to: int
+    base_distance: Optional[float] = None
+    dynamic_cost: Optional[float] = None
     cost: float
     risk: float = 0.0
     hazard: bool = False
@@ -46,8 +53,10 @@ class RoutingRequest(BaseModel):
     end: int
     algorithm: str = "dijkstra"
     avoid_hazards: bool = False
-    risk_weight: float = 0.0
-    hazard_weight: float = 0.0
+    distance_weight: float = 1.0
+    risk_weight: float = 0.5
+    hazard_weight: float = 0.7
+    congestion_weight: float = 0.5
 
 
 class PathResponse(BaseModel):
@@ -58,6 +67,7 @@ class PathResponse(BaseModel):
     algorithm: str
     execution_time_ms: float
     is_optimal: bool
+    evaluated_states: Optional[int] = None  # Number of states/nodes explored
     quantum_mode: Optional[str] = None  # "QAOA", "Quantum Annealing Simulation", etc.
 
 

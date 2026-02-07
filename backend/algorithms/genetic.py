@@ -1,18 +1,37 @@
 import random
 from typing import Dict, List, Tuple
 
+from .objective import ObjectiveWeights, calculate_edge_cost
+
 
 class GeneticAlgorithmSolver:
     def __init__(self, population_size=20, generations=10):
         self.population_size = population_size
         self.generations = generations
 
-    def solve(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
+    def solve(
+        self,
+        start: int,
+        end: int,
+        graph_data: Dict,
+        avoid_hazards: bool = False,
+        distance_weight: float = 1.0,
+        risk_weight: float = 0.0,
+        hazard_weight: float = 0.0,
+        congestion_weight: float = 0.0,
+    ) -> Tuple[List[int], float]:
         nodes = {node["id"]: node for node in graph_data["nodes"]}
         edges = graph_data["edges"]
 
+        weights = ObjectiveWeights(
+            distance_weight=distance_weight,
+            risk_weight=risk_weight,
+            hazard_weight=hazard_weight,
+            congestion_weight=congestion_weight,
+        )
+
         if nodes.get(start, {}).get("blocked") or nodes.get(end, {}).get("blocked"):
-            return [start, end], float("inf")
+            return [start, end], float("inf"), 0
 
         adjacency = {node_id: [] for node_id in nodes}
         for edge in edges:
@@ -29,7 +48,8 @@ class GeneticAlgorithmSolver:
             if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
                 continue
             
-            adjacency[edge["from"]].append((edge["to"], edge["cost"]))
+            cost = calculate_edge_cost(edge, from_node, to_node, weights)
+            adjacency[edge["from"]].append((edge["to"], cost))
 
         def path_cost(path):
             total = 0
@@ -80,10 +100,12 @@ class GeneticAlgorithmSolver:
                 population.append(path)
 
         if not population:
-            return [start, end], float("inf")
+            return [start, end], float("inf"), 0
 
+        evaluated_states = 0
         for _ in range(self.generations):
             population = sorted(population, key=lambda p: path_cost(p))
+            evaluated_states += len(population)  # Fitness evaluation
             population = population[: self.population_size // 2]
 
             while len(population) < self.population_size:
@@ -102,5 +124,6 @@ class GeneticAlgorithmSolver:
 
         best_path = min(population, key=lambda p: path_cost(p))
         best_cost = path_cost(best_path)
+        evaluated_states += len(population)  # Final evaluation
 
-        return best_path, best_cost
+        return best_path, best_cost, evaluated_states

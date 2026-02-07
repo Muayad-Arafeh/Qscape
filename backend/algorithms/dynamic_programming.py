@@ -1,13 +1,17 @@
 from typing import Dict, List, Tuple
 
+from .objective import ObjectiveWeights, calculate_edge_cost
+
 
 def dynamic_programming(
     start: int,
     end: int,
     graph_data: Dict,
     avoid_hazards: bool = False,
+    distance_weight: float = 1.0,
     risk_weight: float = 0.0,
     hazard_weight: float = 0.0,
+    congestion_weight: float = 0.0,
 ) -> Tuple[List[int], float]:
     """
     Dynamic Programming approach using Bellman-Ford relaxation.
@@ -18,14 +22,20 @@ def dynamic_programming(
     edges = graph_data["edges"]
 
     if nodes.get(start, {}).get("blocked") or nodes.get(end, {}).get("blocked"):
-        return [start, end], float("inf")
+        return [start, end], float("inf"), 0
 
     # Initialize distances and parents
     distances = {node_id: float("inf") for node_id in nodes}
     distances[start] = 0.0
     parent = {node_id: None for node_id in nodes}
 
-    # Build adjacency with hazard/risk logic
+    # Build adjacency with shared multi-objective logic
+    weights = ObjectiveWeights(
+        distance_weight=distance_weight,
+        risk_weight=risk_weight,
+        hazard_weight=hazard_weight,
+        congestion_weight=congestion_weight,
+    )
     adjacency = {}
     for edge in edges:
         if edge.get("blocked"):
@@ -43,12 +53,7 @@ def dynamic_programming(
         if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
             continue
 
-        # Calculate edge cost with risk and hazard penalties
-        hazard_penalty = 0.0
-        if from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard"):
-            hazard_penalty = hazard_weight
-
-        cost = edge["cost"] + (risk_weight * edge.get("risk", 0.0)) + hazard_penalty
+        cost = calculate_edge_cost(edge, from_node, to_node, weights)
 
         if from_id not in adjacency:
             adjacency[from_id] = []
@@ -56,9 +61,11 @@ def dynamic_programming(
 
     # Relax edges |V| - 1 times
     num_nodes = len(nodes)
+    evaluated_states = 0
     for _ in range(num_nodes - 1):
         for from_id in adjacency:
             for to_id, cost in adjacency[from_id]:
+                evaluated_states += 1
                 if distances[from_id] != float("inf") and distances[from_id] + cost < distances[to_id]:
                     distances[to_id] = distances[from_id] + cost
                     parent[to_id] = from_id
@@ -73,6 +80,6 @@ def dynamic_programming(
 
     # If no path found, return empty path with infinity cost
     if path[0] != start:
-        return [start, end], float("inf")
+        return [start, end], float("inf"), evaluated_states
 
-    return path, distances[end]
+    return path, distances[end], evaluated_states

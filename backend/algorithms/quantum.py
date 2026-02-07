@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from collections import deque
 
-from .objective import ObjectiveWeights, calculate_combined_cost
+from .objective import ObjectiveWeights, calculate_edge_cost
 
 
 class QuantumSolver:
@@ -19,36 +19,63 @@ class QuantumSolver:
         except ImportError:
             return False
 
-    def solve(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
+    def solve(
+        self,
+        start: int,
+        end: int,
+        graph_data: Dict,
+        avoid_hazards: bool = False,
+        distance_weight: float = 1.0,
+        risk_weight: float = 0.0,
+        hazard_weight: float = 0.0,
+        congestion_weight: float = 0.0,
+    ) -> Tuple[List[int], float, int]:
         """
         Solve shortest path using quantum approach.
         
-        Returns path and cost. Metadata about execution mode is stored in self.execution_mode
+        Returns path, cost, and evaluated_states. Metadata about execution mode is stored in self.execution_mode
         """
+        weights = ObjectiveWeights(
+            distance_weight=distance_weight,
+            risk_weight=risk_weight,
+            hazard_weight=hazard_weight,
+            congestion_weight=congestion_weight,
+        )
+
         if not self.qaoa_implemented:
             # Fall back to simulated quantum annealing
-            path, cost = self._quantum_annealing_simulation(start, end, graph_data, avoid_hazards)
+            path, cost, states = self._quantum_annealing_simulation(start, end, graph_data, avoid_hazards, weights)
             self.execution_mode = "Quantum Annealing Simulation (Qiskit unavailable)"
-            return path, cost
+            return path, cost, states
 
         # Try QAOA first
-        path, cost = self._qaoa_solver(start, end, graph_data, avoid_hazards)
+        path, cost, states = self._qaoa_solver(start, end, graph_data, avoid_hazards, weights)
         self.execution_mode = "QAOA"
         
         if cost == float("inf"):
             # QAOA failed, fall back to simulation
-            path, cost = self._quantum_annealing_simulation(start, end, graph_data, avoid_hazards)
+            path, cost, states = self._quantum_annealing_simulation(start, end, graph_data, avoid_hazards, weights)
             self.execution_mode = "Quantum Annealing Simulation (QAOA fallback)"
         
-        return path, cost
+        return path, cost, states
 
     def get_execution_mode(self) -> str:
         """Return which quantum execution mode was used."""
         return self.execution_mode
 
-    def _quantum_annealing_simulation(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
+    def _quantum_annealing_simulation(
+        self,
+        start: int,
+        end: int,
+        graph_data: Dict,
+        avoid_hazards: bool = False,
+        weights: ObjectiveWeights | None = None,
+    ) -> Tuple[List[int], float, int]:
         nodes = {node["id"]: node for node in graph_data["nodes"]}
         edges = graph_data["edges"]
+
+        if weights is None:
+            weights = ObjectiveWeights()
 
         adjacency = {node_id: [] for node_id in nodes}
         for edge in edges:
@@ -62,7 +89,8 @@ class QuantumSolver:
             if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
                 continue
             
-            adjacency[edge["from"]].append((edge["to"], edge["cost"]))
+            cost = calculate_edge_cost(edge, from_node, to_node, weights)
+            adjacency[edge["from"]].append((edge["to"], cost))
 
         def path_cost(path):
             total = 0
@@ -100,12 +128,14 @@ class QuantumSolver:
 
         initial_path = bfs_initial_path(start, end)
         if not initial_path:
-            return [start, end], float("inf")
+            return [start, end], float("inf"), 0
 
         current_path = initial_path
         current_cost = path_cost(current_path)
+        evaluated_states = 0
 
         for _ in range(num_iterations):
+            evaluated_states += 1
             candidate_path = self._generate_neighbor_path(current_path, adjacency, start, end)
             candidate_cost = path_cost(candidate_path)
             if candidate_cost == float("inf"):
@@ -125,9 +155,9 @@ class QuantumSolver:
 
         if best_cost == float("inf"):
             fallback_cost = path_cost(initial_path)
-            return initial_path, fallback_cost
+            return initial_path, fallback_cost, evaluated_states
 
-        return best_path if best_path else initial_path, best_cost
+        return best_path if best_path else initial_path, best_cost, evaluated_states
 
     def _generate_neighbor_path(self, path: List[int], adjacency: Dict, start: int, end: int) -> List[int]:
         new_path = path.copy()
@@ -152,7 +182,14 @@ class QuantumSolver:
 
         return new_path
 
-    def _qaoa_solver(self, start: int, end: int, graph_data: Dict, avoid_hazards: bool = False) -> Tuple[List[int], float]:
+    def _qaoa_solver(
+        self,
+        start: int,
+        end: int,
+        graph_data: Dict,
+        avoid_hazards: bool = False,
+        weights: ObjectiveWeights | None = None,
+    ) -> Tuple[List[int], float, int]:
         """
         Implement QAOA for shortest path problem.
         Uses Ising Hamiltonian encoding where edge weights are encoded in Ising coupling.
@@ -184,6 +221,8 @@ class QuantumSolver:
             cost_matrix[i][i] = 0.0
 
         nodes_dict = {node["id"]: node for node in graph_data["nodes"]}
+        if weights is None:
+            weights = ObjectiveWeights()
         for edge in graph_data["edges"]:
             if edge.get("blocked"):
                 continue
@@ -201,7 +240,8 @@ class QuantumSolver:
                 from_qubit = node_to_qubit[from_id]
                 to_qubit = node_to_qubit[to_id]
                 # Normalize edge cost to [0, 1] for angle encoding
-                normalized_cost = min(1.0, edge["cost"] / 10.0)
+                edge_cost = calculate_edge_cost(edge, from_node, to_node, weights)
+                normalized_cost = min(1.0, edge_cost / 10.0)
                 cost_matrix[from_qubit][to_qubit] = normalized_cost
 
         # QAOA parameters
@@ -252,7 +292,8 @@ class QuantumSolver:
 
         # Execute on simulator
         simulator = Aer.get_backend("qasm_simulator")
-        job = simulator.run(circuit, shots=1000)
+        shots = 1000
+        job = simulator.run(circuit, shots=shots)
         result = job.result()
         counts = result.get_counts(circuit)
 
@@ -263,7 +304,7 @@ class QuantumSolver:
         selected_nodes = [qubit_to_node[i] for i, bit in enumerate(best_bitstring) if bit == "1"]
         
         # Build path by BFS from start to end using selected nodes
-        path = self._bfs_path_with_node_set(start, end, graph_data, set(selected_nodes), avoid_hazards)
+        path = self._bfs_path_with_node_set(start, end, graph_data, set(selected_nodes), avoid_hazards, weights)
         
         if not path:
             # Fallback: use BFS on all nodes
@@ -276,11 +317,12 @@ class QuantumSolver:
                 to_node = nodes_dict.get(edge["to"])
                 if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
                     continue
-                adjacency[edge["from"]].append((edge["to"], edge["cost"]))
+                cost = calculate_edge_cost(edge, from_node, to_node, weights)
+                adjacency[edge["from"]].append((edge["to"], cost))
             path = self._bfs_path(start, end, adjacency)
             
             if not path:
-                return [start, end], float("inf")
+                return [start, end], float("inf"), shots
 
         # Calculate cost
         adjacency = {node["id"]: [] for node in graph_data["nodes"]}
@@ -292,7 +334,8 @@ class QuantumSolver:
             to_node = nodes_dict.get(edge["to"])
             if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
                 continue
-            adjacency[edge["from"]].append((edge["to"], edge["cost"]))
+            cost = calculate_edge_cost(edge, from_node, to_node, weights)
+            adjacency[edge["from"]].append((edge["to"], cost))
 
         def path_cost(p):
             total = 0
@@ -308,14 +351,22 @@ class QuantumSolver:
             return total
 
         cost = path_cost(path)
-        return path, cost
+        return path, cost, shots
 
     def _bfs_path_with_node_set(
-        self, start_id: int, end_id: int, graph_data: Dict, selected_nodes: set, avoid_hazards: bool = False
+        self,
+        start_id: int,
+        end_id: int,
+        graph_data: Dict,
+        selected_nodes: set,
+        avoid_hazards: bool = False,
+        weights: ObjectiveWeights | None = None,
     ) -> List[int] | None:
         """BFS but prioritize paths through selected_nodes."""
         adjacency = {}
         nodes_dict = {node["id"]: node for node in graph_data["nodes"]}
+        if weights is None:
+            weights = ObjectiveWeights()
         for edge in graph_data["edges"]:
             if edge.get("blocked"):
                 continue
@@ -327,7 +378,8 @@ class QuantumSolver:
             to_id = edge["to"]
             if from_id not in adjacency:
                 adjacency[from_id] = []
-            adjacency[from_id].append((to_id, edge["cost"]))
+            cost = calculate_edge_cost(edge, from_node, to_node, weights)
+            adjacency[from_id].append((to_id, cost))
 
         queue = deque([(start_id, [start_id])])
         visited = {start_id}
@@ -502,10 +554,14 @@ class QuantumSolver:
             if path:
                 # Calculate cost
                 cost = 0
+                nodes_dict = {node["id"]: node for node in graph_data["nodes"]}
+                weights = ObjectiveWeights()
                 for i in range(len(path) - 1):
                     edge = self._find_edge_data(path[i], path[i + 1], graph_data)
                     if edge:
-                        cost += edge["cost"]
+                        from_node = nodes_dict.get(path[i], {})
+                        to_node = nodes_dict.get(path[i + 1], {})
+                        cost += calculate_edge_cost(edge, from_node, to_node, weights)
                 
                 # Validate constraints
                 is_valid, violations = validator.validate_solution(path, cost)

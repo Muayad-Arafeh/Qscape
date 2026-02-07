@@ -6,7 +6,7 @@ import os
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
-from graph import get_graph, get_zone_metadata, get_constraint_config
+from graph import get_graph
 from algorithms import (
     QuantumSolver,
     GeneticAlgorithmSolver,
@@ -99,6 +99,7 @@ def solve_routing(request: RoutingRequest):
     algorithm = request.algorithm.lower()
     path = None
     cost = None
+    evaluated_states = 0
     execution_time = 0.0
     is_optimal = False
     quantum_mode = None
@@ -107,55 +108,81 @@ def solve_routing(request: RoutingRequest):
     
     if algorithm == "cache" or algorithm == "dijkstra":
         # Cache is no longer available, use dijkstra instead
-        path, cost = dijkstra(
+        path, cost, evaluated_states = dijkstra(
             request.start,
             request.end,
             graph_data,
             request.avoid_hazards,
+            request.distance_weight,
             request.risk_weight,
             request.hazard_weight,
+            request.congestion_weight,
         )
         is_optimal = True
 
     elif algorithm == "dynamic_programming":
-        path, cost = dynamic_programming(
+        path, cost, evaluated_states = dynamic_programming(
             request.start,
             request.end,
             graph_data,
             request.avoid_hazards,
+            request.distance_weight,
             request.risk_weight,
             request.hazard_weight,
+            request.congestion_weight,
         )
         is_optimal = True
 
     elif algorithm == "astar":
-        path, cost = astar(
+        path, cost, evaluated_states = astar(
             request.start,
             request.end,
             graph_data,
             request.avoid_hazards,
+            request.distance_weight,
             request.risk_weight,
             request.hazard_weight,
+            request.congestion_weight,
         )
         is_optimal = True
 
     elif algorithm == "quantum":
-        path, cost = quantum_solver.solve(request.start, request.end, graph_data, request.avoid_hazards)
-        quantum_mode = quantum_solver.get_execution_mode()
-        is_optimal = False  # QAOA is heuristic, not guaranteed optimal
-
-    elif algorithm == "genetic":
-        path, cost = genetic_solver.solve(request.start, request.end, graph_data, request.avoid_hazards)
-        is_optimal = False
-
-    else:
-        path, cost = dijkstra(
+        path, cost, evaluated_states = quantum_solver.solve(
             request.start,
             request.end,
             graph_data,
             request.avoid_hazards,
+            request.distance_weight,
             request.risk_weight,
             request.hazard_weight,
+            request.congestion_weight,
+        )
+        quantum_mode = quantum_solver.get_execution_mode()
+        is_optimal = False  # QAOA is heuristic, not guaranteed optimal
+
+    elif algorithm == "genetic":
+        path, cost, evaluated_states = genetic_solver.solve(
+            request.start,
+            request.end,
+            graph_data,
+            request.avoid_hazards,
+            request.distance_weight,
+            request.risk_weight,
+            request.hazard_weight,
+            request.congestion_weight,
+        )
+        is_optimal = False
+
+    else:
+        path, cost, evaluated_states = dijkstra(
+            request.start,
+            request.end,
+            graph_data,
+            request.avoid_hazards,
+            request.distance_weight,
+            request.risk_weight,
+            request.hazard_weight,
+            request.congestion_weight,
         )
         is_optimal = True
 
@@ -190,6 +217,7 @@ def solve_routing(request: RoutingRequest):
         "algorithm": algorithm,
         "execution_time_ms": round(execution_time, 2),
         "is_optimal": is_optimal,
+        "evaluated_states": evaluated_states,
         "quantum_mode": quantum_mode,
     }
 
@@ -197,15 +225,6 @@ def solve_routing(request: RoutingRequest):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-
-
-@app.get("/constraints/info")
-def get_constraints_info():
-    """Get current constraint configuration and zone metadata"""
-    return {
-        "config": get_constraint_config(),
-        "zones": get_zone_metadata()
-    }
 
 
 # AI Prediction Endpoints

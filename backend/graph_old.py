@@ -152,4 +152,3 @@ def get_constraint_config():
         "time_limit": 30,  # minutes to complete evacuation
         "constraint_penalty": 1000,  # penalty weight for constraint violations
     }
-

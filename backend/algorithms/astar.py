@@ -2,14 +2,18 @@ import heapq
 import math
 from typing import Dict, List, Tuple
 
+from .objective import ObjectiveWeights, calculate_edge_cost
+
 
 def astar(
     start: int,
     end: int,
     graph_data: Dict,
     avoid_hazards: bool = False,
+    distance_weight: float = 1.0,
     risk_weight: float = 0.0,
     hazard_weight: float = 0.0,
+    congestion_weight: float = 0.0,
 ) -> Tuple[List[int], float]:
     """
     A* algorithm with Euclidean distance heuristic.
@@ -20,7 +24,7 @@ def astar(
     edges = graph_data["edges"]
 
     if nodes.get(start, {}).get("blocked") or nodes.get(end, {}).get("blocked"):
-        return [start, end], float("inf")
+        return [start, end], float("inf"), 0
 
     # Precompute node coordinates for heuristic
     node_coords = {node["id"]: (node["x"], node["y"]) for node in graph_data["nodes"]}
@@ -31,7 +35,13 @@ def astar(
         x2, y2 = node_coords.get(end, (0, 0))
         return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
-    # Build adjacency with hazard/risk logic
+    # Build adjacency with shared multi-objective logic
+    weights = ObjectiveWeights(
+        distance_weight=distance_weight,
+        risk_weight=risk_weight,
+        hazard_weight=hazard_weight,
+        congestion_weight=congestion_weight,
+    )
     adjacency = {}
     for edge in edges:
         if edge.get("blocked"):
@@ -49,12 +59,7 @@ def astar(
         if avoid_hazards and (from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard")):
             continue
 
-        # Calculate edge cost with risk and hazard penalties
-        hazard_penalty = 0.0
-        if from_node.get("hazard") or to_node.get("hazard") or edge.get("hazard"):
-            hazard_penalty = hazard_weight
-
-        cost = edge["cost"] + (risk_weight * edge.get("risk", 0.0)) + hazard_penalty
+        cost = calculate_edge_cost(edge, from_node, to_node, weights)
 
         if from_id not in adjacency:
             adjacency[from_id] = []
@@ -70,9 +75,11 @@ def astar(
     g_score[start] = 0.0
     parent = {node_id: None for node_id in nodes}
     closed_set = set()
+    evaluated_states = 0
 
     while open_set:
         _, _, current = heapq.heappop(open_set)
+        evaluated_states += 1
 
         if current in closed_set:
             continue
@@ -85,7 +92,7 @@ def astar(
                 path.append(node)
                 node = parent[node]
             path.reverse()
-            return path, g_score[end]
+            return path, g_score[end], evaluated_states
 
         closed_set.add(current)
 
@@ -104,4 +111,4 @@ def astar(
                 counter += 1
 
     # No path found
-    return [start, end], float("inf")
+    return [start, end], float("inf"), evaluated_states
