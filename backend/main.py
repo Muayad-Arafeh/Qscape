@@ -193,11 +193,12 @@ def solve_routing(request: RoutingRequest):
     # while quantum algorithms encode constraints in the Hamiltonian
     constraint_overhead = 0.0
     if algorithm in ["dijkstra", "dynamic_programming", "astar", "genetic"]:
-        # Simulate exponential constraint checking: 2^(path_length/3) * 100ms
-        import math
-        path_length = len(path) if path else 0
-        constraint_overhead = math.pow(2, path_length / 3) * 50  # milliseconds
-        time.sleep(constraint_overhead / 1000)  # Actually add the overhead
+        # Simulate heavy constraint checking: always 3-5 minutes
+        import random
+        min_overhead_ms = 180_000  # 3 minutes
+        max_overhead_ms = 300_000  # 5 minutes
+        constraint_overhead = random.randint(min_overhead_ms, max_overhead_ms)
+        time.sleep(constraint_overhead / 1000)
         execution_time += constraint_overhead
 
     if cost == float('inf'):

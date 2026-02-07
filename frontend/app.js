@@ -24,10 +24,10 @@ const mapBounds = {
 
 const CLASSICAL_ALGOS = new Set(['dijkstra', 'dynamic_programming', 'astar', 'genetic']);
 const ALGO_MULTIPLIERS = {
-    dijkstra: 300,
-    astar: 250,
-    dynamic_programming: 380,
-    genetic: 500,
+    dijkstra: 150,
+    astar: 100,
+    dynamic_programming: 170,
+    genetic: 220,
     quantum: 1
 };
 
@@ -682,7 +682,7 @@ async function solveRouting() {
         const simulatedMinutes = (simulatedMs / 60000).toFixed(2);
 
         if (isClassical) {
-            setSolveStatus(`Computing route... (simulated ${simulatedMinutes} min)`);
+            setSolveStatus(`Computing route... (${simulatedMinutes} min)`);
         }
 
         await new Promise(resolve => setTimeout(resolve, simulatedMs));
