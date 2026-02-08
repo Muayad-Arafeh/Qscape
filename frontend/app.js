@@ -573,26 +573,45 @@ async function solveRouting() {
         const hazardList = Array.from(hazardNodes).join(',');
         const blockedList = Array.from(blockedNodes).join(',');
 
+        // Build query strings, only include parameters if they have values
+        const trafficParams = new URLSearchParams();
+        if (hazardList) trafficParams.append('hazard_nodes', hazardList);
+        if (blockedList) trafficParams.append('blocked_nodes', blockedList);
+        
+        const hazardParams = new URLSearchParams();
+        if (hazardList) hazardParams.append('node_ids', hazardList);
+        if (blockedList) hazardParams.append('blocked_nodes', blockedList);
+        
+        const qualityParams = new URLSearchParams();
+        qualityParams.append('start', selectedStart);
+        qualityParams.append('end', selectedEnd);
+        qualityParams.append('algorithm', algorithm);
+        if (hazardList) qualityParams.append('hazard_nodes', hazardList);
+        if (blockedList) qualityParams.append('blocked_nodes', blockedList);
+
         // Fetch all predictions in parallel
         const [trafficResp, hazardResp, qualityResp] = await Promise.all([
-            fetch(`${API_BASE}/predict/traffic?hazard_nodes=${hazardList}&blocked_nodes=${blockedList}`),
-            fetch(`${API_BASE}/predict/hazards?node_ids=${hazardList}&blocked_nodes=${blockedList}`),
-            fetch(`${API_BASE}/predict/route-quality?start=${selectedStart}&end=${selectedEnd}&algorithm=${algorithm}&hazard_nodes=${hazardList}&blocked_nodes=${blockedList}`)
+            fetch(`${API_BASE}/predict/traffic?${trafficParams.toString()}`),
+            fetch(`${API_BASE}/predict/hazards?${hazardParams.toString()}`),
+            fetch(`${API_BASE}/predict/route-quality?${qualityParams.toString()}`)
         ]);
 
         // Check for response errors
         if (!trafficResp.ok || !hazardResp.ok || !qualityResp.ok) {
-            setSolveStatus('');
-            showToast('Could not fetch AI predictions. Proceeding without predictions.', 'warning');
+            console.warn('AI prediction endpoints returned errors');
         } else {
-            trafficData = await trafficResp.json();
-            hazardPredictions = await hazardResp.json();
-            routeQualityData = await qualityResp.json();
+            try {
+                trafficData = await trafficResp.json();
+                hazardPredictions = await hazardResp.json();
+                routeQualityData = await qualityResp.json();
 
-            // Check if any response is an error object
-            if (!trafficData.detail && !hazardPredictions.detail && !routeQualityData.detail) {
-                displayPredictions();
-                drawGraph(); // Redraw with prediction overlays
+                // Check if any response is an error object
+                if (!trafficData.detail && !hazardPredictions.detail && !routeQualityData.detail) {
+                    displayPredictions();
+                    drawGraph(); // Redraw with prediction overlays
+                }
+            } catch (parseError) {
+                console.warn('Failed to parse prediction responses:', parseError);
             }
         }
     } catch (error) {

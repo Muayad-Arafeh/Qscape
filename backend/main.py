@@ -251,7 +251,6 @@ def predict_traffic(hazard_nodes: Optional[str] = None, blocked_nodes: Optional[
             prediction_time=result['prediction_time']
         )
     except Exception as e:
-        print(f"Error in predict_traffic: {e}")
         raise HTTPException(status_code=500, detail=f"Traffic prediction error: {str(e)}")
 
 
@@ -277,7 +276,6 @@ def predict_hazards(node_ids: Optional[str] = None, blocked_nodes: Optional[str]
             prediction_time=result['prediction_time']
         )
     except Exception as e:
-        print(f"Error in predict_hazards: {e}")
         raise HTTPException(status_code=500, detail=f"Hazard prediction error: {str(e)}")
 
 
@@ -320,7 +318,4 @@ def predict_route_quality(
             prediction_time=result['prediction_time']
         )
     except Exception as e:
-        print(f"Error in predict_route_quality: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Route quality prediction error: {str(e)}")
